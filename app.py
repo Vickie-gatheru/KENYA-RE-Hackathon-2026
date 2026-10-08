@@ -166,15 +166,18 @@ tiv = d.tiv_kes.sum()
 pct = lambda arr, q: np.percentile(arr, q)
 
 # ================================================================== header
-if page != "Ask the assistant":
-    st.title(page)
 if tech:
-    st.caption("**SYNTHETIC** portfolio · **PROXY** hazard (terrain + rivers, not measured depth) · **ASSUMED** return "
-               "periods, type adjustments and policy/treaty terms · losses ground-up unless marked insured or reinsured"
-               + (" · AI hazard uplift **on**" if use_ai else ""))
+    _labels = ("<b>SYNTHETIC</b> portfolio · <b>PROXY</b> hazard (terrain + rivers, not measured depth) · <b>ASSUMED</b> "
+               "return periods, type adjustments and policy/treaty terms · losses ground-up unless marked insured or "
+               "reinsured" + (" · AI hazard uplift <b>on</b>" if use_ai else ""))
 else:
-    st.caption("Prototype · **SYNTHETIC** portfolio · flood map is an **estimate** from terrain and rivers, improved with "
-               "flood reports · prices and policy terms use stated **ASSUMPTIONS** (switch on *Model details* to see them)")
+    _labels = ("Prototype · <b>SYNTHETIC</b> portfolio · flood map is an <b>estimate</b> from terrain and rivers, improved "
+               "with flood reports · prices and policy terms use stated <b>ASSUMPTIONS</b> (switch on <i>Model details</i> "
+               "to see them)")
+if page == "Ask the assistant":
+    st.caption(_labels.replace("<b>", "**").replace("</b>", "**").replace("<i>", "*").replace("</i>", "*"))
+else:
+    st.markdown(brand.page_header(page, _labels), unsafe_allow_html=True)
 loss_cur = cur["loss"]
 
 # ================================================================== 0. evaluate a risk or claim

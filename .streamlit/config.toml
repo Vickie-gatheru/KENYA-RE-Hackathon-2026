@@ -13,7 +13,7 @@ baseRadius = "medium"
 
 [theme.sidebar]
 backgroundColor = "#F2F4F7"
-secondaryBackgroundColor = "#ECF0F4"
-textColor = "#041D3B"
-primaryColor = "#C30D35"
-borderColor = "#E3E8EE"
+secondaryBackgroundColor = "#0B2B52"
+textColor = "#FFFFFF"
+primaryColor = "#FF6B86"
+borderColor = "#1E3E66"

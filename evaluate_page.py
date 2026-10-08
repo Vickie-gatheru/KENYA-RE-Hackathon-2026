@@ -214,8 +214,8 @@ def _results(st, o, d_cur, S):
                         f"+{_k(o['port_100_after'] - o['port_100_before'])}", delta_color="inverse")
     else:
         m = st.columns(4 if o.get("claim") else 3)
-        m[0].metric("Minimum flood premium / yr", _k(o["aal_kes"]))
-        m[0].caption(f"{o['rate_per_mille']:.2f} per KES 1,000 insured, before expenses and profit")
+        m[0].metric("Flood premium / yr", _k(o["aal_kes"]))
+        m[0].caption(f"minimum, before expenses and profit · {o['rate_per_mille']:.2f} per KES 1,000 insured")
         m[1].metric("Loss in a 1-in-100 flood", _k(r100.loss_kes))
         m[1].caption(f"1% chance a year · {r100.damage_pct:.0f}% of the building's value")
         top = 100 - o["city_percentile"]

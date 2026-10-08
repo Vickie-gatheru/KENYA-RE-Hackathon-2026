@@ -261,10 +261,83 @@ res.append(ok(okc["claim"]["verdict"] == "Consistent" and abs(okc["claim"]["impl
 r_ag = A.evaluate_site(ctx, "semi-permanent", 2e6, place_name="Mathare", claimed_loss_kes=4e5)
 res.append(ok(bool("steps" in r_ag and r_ag["risk_band"]), "assistant: evaluate_site tool returns the explained evaluation"))
 res.append(ok("Flood risk evaluation" in EV.report_markdown(o), "evaluation report renders"))
+import briefing as BR
+rb = BR.rule_briefing(oc)
+res.append(ok(rb["stance"] == "Claim needs review" and rb["drivers"] and rb["actions"] and rb["source"] == "rules",
+              "briefing: rule-based structure filled; stance decided by rules"))
+good = json.dumps({"headline": "High flood risk at this site.", "drivers": [{"factor": "Low ground", "effect": "raises",
+                   "detail": "The site sits in a mapped flood area."}], "actions": ["Ask for the floor height"],
+                   "questions": ["Has it flooded before?"], "caveat": "The map is a proxy."})
+bad = good.replace("High flood risk at this site.", "Premium of KES 98,765 a year.")
+ab, ab_bad = BR.ai_briefing(o, lambda p: good), BR.ai_briefing(o, lambda p: bad)
+res.append(ok(ab["source"] == "ai" and ab["stance"] == BR.stance(o)[0] and ab_bad["source"] == "rules",
+              "briefing: AI wording kept when its numbers check out; invented number -> rule-based fallback"))
+ob = BR.owner_briefing(o)
+res.append(ok("loading" not in json.dumps(ob).lower() and "underwriter" not in json.dumps(ob).lower(),
+              "public briefing: written for building owners (no underwriting jargon)"))
 ps = " ".join(EV.plain_summary(oc))
 res.append(ok(len(EV.plain_summary(oc)) >= 3 and not any(w in ps.lower() for w in
               ["score", "sigma", "shap", "proxy", "uplift", "jrc", "weight", "tier", "aal", "per mille"]),
               "underwriter summary: plain sentences, no model jargon"))
+
+# ---- broker submission reader (inline memo text; no PDF fixture, no network: geocoder is a stub)
+import copy
+import submission as SB
+memo = """CLIENT: Test Tower Ltd
+DATE ISSUED: 1 March 2026
+EXPIRY: 4 March 2026
+STREET ADDRESS: Plot 9, Upper Hill Area, Nairobi
+GPS COORDINATES: -1.2847°S, 36.8247°E
+ELEVATION: 1,600 meters above sea level
+Total Number of Floors: 10 (above ground) + 1 (basement)
+GROSS FLOOR AREA: 9,000 m² (all levels combined)
+- Ground Floor: 1,000 m²
+- Typical Office Floor (F2-F10): 1,000 m² each
+- Basement levels: 1,000 m² each
+
+CONSTRUCTION CLASSIFICATION: RCC Frame
+MAIN GENERATOR UNIT 1:
+- Location: Basement Level 1 (plant room)
+- Estimated daily consumption: 40,000 liters
+- Average monthly water: 40,000 m³
+Proximity to Nairobi River: 1.0 km (south)
+River elevation: ~1,300m ASL
+Flood potential: Minimal (terrain elevation provides natural protection)
+Flood limit can be set at full TIV (KES 500,000,000) with confidence."""
+geo = {"Upper Hill": (-1.2941, 36.8129)}.get
+fm = SB.extract(memo)
+res.append(ok(fm["coords"]["value"] == (-1.2847, 36.8247) and fm["floors"]["value"] == (10, 1)
+              and fm["tiv_kes"]["value"] == 5e8 and fm["housing_class"] == "concrete_rcc"
+              and all(_n in fm[k]["quote"] for k, _n in [("gfa_m2", "9,000"), ("tiv_kes", "500,000,000")]),
+              "submission: facts read by rules, each value with the line it came from"))
+fl = {x["title"].split(" ")[0] + " " + x["title"].split(" ")[1]: x["level"] for x in SB.checks(fm, geocoder=geo)}
+res.append(ok(fl.get("Floor areas") == "red" and fl.get("Impossible height") == "red" and fl.get("Critical plant") == "red"
+              and fl.get("Coordinates don't") == "red" and fl.get("Water figures") == "amber" and fl.get("Only 3") == "amber",
+              "submission checks: floor-area sum, river height, basement plant, address vs GPS, water, deadline"))
+real_q = "Flood potential: Minimal (terrain elevation provides natural protection)"
+fake_llm = lambda p: json.dumps({"fields": {"sump_m3h": "Sump pump capacity: 90 m³/hour",
+                                            "client": "The insured party is Test Tower Ltd."},
+                                 "contradictions": [{"a": real_q, "b": "Proximity to Nairobi River: 1.0 km (south)",
+                                                     "why": "a river 1.0 km away"},
+                                                    {"a": real_q, "b": "ELEVATION: 1,600 meters above sea level",
+                                                     "why": "the site is 250 m lower"}]})
+memo2 = memo.replace("CLIENT: Test Tower Ltd\n", "")
+fa = SB.extract(memo, call=fake_llm)
+fa2 = SB.extract(memo2 + "\nThe insured party is Test Tower Ltd.", call=fake_llm)
+res.append(ok("sump_m3h" not in fa and len(fa["contradictions"]) == 1 and "client" in fa2 and fa2["client"]["how"] == "ai"
+              and any(r["field"] == "sump_m3h" for r in fa["rejected"]),
+              "submission AI: quotes must be in the document (invented one rejected); reasons with new numbers rejected"))
+sh = SB.value_shares(fm)
+e_b, aal_b = SB.building_events(o["events"], "concrete_rcc", 5e8, sh)
+blk = cm.damage_ratio(o["events"].depth_m.to_numpy(), **cm.VULN["concrete_rcc"]) * 5e8
+res.append(ok(abs(sh["basement"] - 1 / 11) < 1e-9 and abs(sh["upper"] - 9 / 11) < 1e-9
+              and (e_b.loss_kes[o["events"].depth_m >= SB.BASEMENT_TRIGGER_M] > 0).all()
+              and e_b.loss_kes.iloc[-1] < blk[-1],
+              "building shape: basements flood once water reaches the street; upper floors stay dry"))
+oo = SB.apply(copy.deepcopy(o), fm, SB.checks(fm, geocoder=geo), "memo.txt")
+res.append(ok(abs(oo["aal_kes"] - cm.aal_from_ep(oo["events"].return_period.to_numpy(float), oo["events"].loss_kes.to_numpy())) < 1
+              and BR.stance(oo)[0] == "Refer to a senior underwriter" and "Broker submission check" in EV.report_markdown(oo),
+              "submission applied: cards use building-shape losses; 2+ red flags -> refer; report includes the check"))
 
 print(f"\n{sum(res)}/{len(res)} passed")
 sys.exit(0 if all(res) else 1)

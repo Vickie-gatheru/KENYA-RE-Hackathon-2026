@@ -12,8 +12,8 @@ headingFont = "Archivo:https://fonts.googleapis.com/css2?family=Archivo:wght@500
 baseRadius = "medium"
 
 [theme.sidebar]
-backgroundColor = "#041D3B"
-secondaryBackgroundColor = "#0B2B52"
-textColor = "#FFFFFF"
-primaryColor = "#E0627F"
-borderColor = "#1E3E66"
+backgroundColor = "#F2F4F7"
+secondaryBackgroundColor = "#ECF0F4"
+textColor = "#041D3B"
+primaryColor = "#C30D35"
+borderColor = "#E3E8EE"

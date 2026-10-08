@@ -96,14 +96,20 @@ UW_PAGES = ["Evaluate a risk or claim", "Portfolio overview", "Insurance & reins
 TECH_PAGES = ["AI drainage evidence", "ML flood model", "Sensitivity & assumptions"]
 st.markdown(brand.CSS, unsafe_allow_html=True)
 st.sidebar.markdown(brand.SIDEBAR_BRAND, unsafe_allow_html=True)
-st.sidebar.write("")
 nav = st.sidebar.container()           # filled after the 'Model details' switch is read
 ctrl = st.sidebar.container()
 st.sidebar.divider()
 tech = st.sidebar.toggle("Model details", value=False,
                          help="For analysts and judges: shows how the AI and ML layers were tested, every modelling "
                               "assumption as a live control, and the full technical working.")
-page = nav.radio("Go to", UW_PAGES + (TECH_PAGES if tech else []), label_visibility="collapsed")
+NAV_LABEL = {"Evaluate a risk or claim": "Evaluate", "Portfolio overview": "Portfolio",
+             "Insurance & reinsurance": "Reinsurance", "Ask the assistant": "Assistant",
+             "AI drainage evidence": "AI flood evidence", "Sensitivity & assumptions": "Assumptions"}
+PAGE_ICON = {"Evaluate a risk or claim": "fact_check", "Portfolio overview": "space_dashboard",
+             "Insurance & reinsurance": "shield", "Accumulation": "stacked_bar_chart", "Ask the assistant": "forum",
+             "AI drainage evidence": "article", "ML flood model": "hub", "Sensitivity & assumptions": "tune"}
+page = nav.radio("Go to", UW_PAGES + (TECH_PAGES if tech else []), label_visibility="collapsed",
+                 format_func=lambda p: f":material/{PAGE_ICON[p]}: {NAV_LABEL.get(p, p)}")
 have_sites, have_ml = sites is not None and len(sites) > 0, bundle is not None
 # defaults = what an underwriter sees; 'Model details' exposes each as a control
 mapping_name, depth_scale, n_sims = list(cm.RP_MAPPINGS)[0], cm.DEPTH_SCALE_M, 500
@@ -172,8 +178,8 @@ else:
 loss_cur = cur["loss"]
 
 # ================================================================== 0. evaluate a risk or claim
+import evaluate_page
 if page == 'Evaluate a risk or claim':
-    import evaluate_page
     evaluate_page.render(st, dict(d=d, d_cur=d_cur, hs=hs, tier_rp=tier_rp, depth_scale=depth_scale,
                                   sites=S_ if use_ai else None, bundle=B_ if use_ai else None, signals=raw, tech=tech,
                                   ai_kwargs=dict(mode=mode, w_max=w_max, sigma=sigma, w_ml=w_ml),
@@ -221,7 +227,7 @@ if page == 'Portfolio overview':
     st.divider()
     rt = uw.rate_table(d_cur, "housing_class", rps, loss_cur, j100).sort_values("rate_per_mille")
     port_rate = cur["aal"] / tiv * 1000
-    fb = go.Figure(go.Bar(x=rt.rate_per_mille, y=rt.housing_class.str.replace("_", " "), orientation="h",
+    fb = go.Figure(go.Bar(x=rt.rate_per_mille, y=rt.housing_class.map(evaluate_page.NICE), orientation="h",
                           marker=dict(color=BLUE, cornerradius=4),
                           text=[f"{v:.2f} ‰" for v in rt.rate_per_mille], textposition="outside",
                           hovertemplate="%{y}: %{x:.2f} per mille<extra></extra>"))
@@ -243,7 +249,9 @@ if page == 'Portfolio overview':
     b = d_cur.assign(aal=uw.building_aal(rps, loss_cur))
     b["rate ‰"] = b.aal / b.tiv_kes * 1000
     st.dataframe(b.nlargest(10, "aal")[["loc_id", "housing_class", "tiv_kes", "aal", "rate ‰"]]
-                 .rename(columns={"tiv_kes": "insured (KES)", "aal": "technical premium (KES)"})
+                 .assign(housing_class=lambda x: x.housing_class.map(evaluate_page.NICE))
+                 .rename(columns={"loc_id": "building", "housing_class": "type", "tiv_kes": "insured (KES)",
+                                  "aal": "technical premium (KES)"})
                  .style.format({"insured (KES)": "{:,.0f}", "technical premium (KES)": "{:,.0f}", "rate ‰": "{:.1f}"}),
                  hide_index=True, use_container_width=True)
 

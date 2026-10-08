@@ -35,8 +35,23 @@ h1, h2, h3, h4 {{ letter-spacing: -0.01em; }}
 h1 {{ border-bottom: 3px solid {CRIMSON}; padding-bottom: .25rem; display: inline-block; }}
 [data-testid="stMetricValue"] {{ color: {NAVY}; font-family: Archivo, Roboto, sans-serif; font-size: 1.85rem; }}
 [data-testid="stMetricValue"] > div {{ overflow: visible; text-overflow: clip; }}
-[data-testid="stSidebar"] [role="radiogroup"] label {{ padding: .3rem .4rem; border-radius: 6px; }}
-[data-testid="stSidebar"] [role="radiogroup"] label:has(input:checked) {{ background: rgba(195, 13, 53, .25); }}
+/* sidebar navigation: icon menu with a filled pill for the current page (no radio circles) */
+[data-testid="stSidebar"] > div:first-child {{ background: #F2F4F7; }}
+[data-testid="stSidebarUserContent"] {{ background: #FFFFFF; border-radius: 16px; margin: .75rem; padding: 1.25rem 1rem;
+  box-shadow: 0 1px 2px rgba(4, 29, 59, .06), 0 4px 16px rgba(4, 29, 59, .06); }}
+[data-testid="stSidebar"] [role="radiogroup"] {{ gap: .25rem; width: 100%; }}
+[data-testid="stSidebar"] [role="radiogroup"] > div, [data-testid="stSidebar"] [role="radiogroup"] > label {{ width: 100%; }}
+[data-testid="stSidebar"] label[data-testid="stRadioOption"] {{ width: 100%; padding: .7rem .9rem; border-radius: 10px; margin: 0;
+  transition: background .15s ease; cursor: pointer; }}
+[data-testid="stSidebar"] label[data-testid="stRadioOption"] > div > div:first-child:not([data-testid]) {{ display: none; }}
+[data-testid="stSidebar"] label[data-testid="stRadioOption"] p {{ font-size: 1rem; color: {NAVY}; display: flex; align-items: center; gap: .75rem; }}
+[data-testid="stSidebar"] label[data-testid="stRadioOption"] p span[data-testid="stIconMaterial"],
+[data-testid="stSidebar"] label[data-testid="stRadioOption"] p span:first-child {{ font-size: 1.3rem; width: 1.4rem; color: #3A4A5E; }}
+[data-testid="stSidebar"] label[data-testid="stRadioOption"]:hover {{ background: {LIGHT}; }}
+[data-testid="stSidebar"] label[data-testid="stRadioOption"]:has(input:checked) {{ background: {CRIMSON};
+  box-shadow: 0 2px 8px rgba(195, 13, 53, .25); }}
+[data-testid="stSidebar"] label[data-testid="stRadioOption"]:has(input:checked) p,
+[data-testid="stSidebar"] label[data-testid="stRadioOption"]:has(input:checked) p span {{ color: #FFFFFF !important; font-weight: 700; }}
 /* chat: user turns as right-aligned bubbles, assistant turns plain (ChatGPT / Claude style) */
 [data-testid="stChatMessage"] {{ background: transparent; max-width: 820px; margin: 0 auto; }}
 [data-testid="stChatMessage"]:has([aria-label="Chat message from user"]) {{ justify-content: flex-end !important; }}
@@ -48,7 +63,13 @@ h1 {{ border-bottom: 3px solid {CRIMSON}; padding-bottom: .25rem; display: inlin
 [data-testid="stChatInput"] {{ max-width: 820px; margin: 0 auto; }}
 </style>"""
 
-SIDEBAR_BRAND = (f"<div style='font-family:Archivo,sans-serif;font-weight:700;font-size:1.25rem;color:#fff;"
-                 f"line-height:1.2'>Nairobi Flood<br><span style='color:{CRIMSON}'>Risk Workbench</span></div>"
-                 "<div style='font-size:.75rem;opacity:.75;margin-top:.3rem'>Kenya Re AI4I Hackathon 2026 · Team A"
-                 "<br>Prototype - not a Kenya Re product</div>")
+_DROP = ("<svg width='26' height='26' viewBox='0 0 24 24' fill='#fff' aria-hidden='true'>"
+         "<path d='M12 2.7c-.3 0-.6.1-.8.4C9.5 5.3 5.5 10.4 5.5 14a6.5 6.5 0 0 0 13 0c0-3.6-4-8.7-5.7-10.9a1 1 0 0 0-.8-.4z'/></svg>")
+SIDEBAR_BRAND = (f"<div style='display:flex;align-items:center;gap:.8rem'>"
+                 f"<div style='background:{CRIMSON};border-radius:12px;width:46px;height:46px;display:flex;"
+                 f"align-items:center;justify-content:center;flex:none'>{_DROP}</div>"
+                 f"<div style='font-family:Archivo,sans-serif;font-weight:700;font-size:1.15rem;color:{NAVY};line-height:1.15'>"
+                 f"Nairobi Flood<br><span style='color:{CRIMSON}'>Risk Workbench</span></div></div>"
+                 f"<div style='font-size:.72rem;color:#5B6470;margin-top:.6rem'>Kenya Re AI4I Hackathon 2026 · Team A · "
+                 "prototype, not a Kenya Re product</div>"
+                 f"<hr style='border:none;border-top:1px solid #D5DCE4;margin:1rem 0 .5rem'>")

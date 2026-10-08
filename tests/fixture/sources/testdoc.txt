@@ -1,0 +1,5 @@
+title: TEST FIXTURE - invented text for unit testing only
+url: none
+date: 2026-10-07
+
+Heavy rain on Tuesday left Testville Estate under water after drains were blocked by rubbish. Shops along Example Road were flooded.

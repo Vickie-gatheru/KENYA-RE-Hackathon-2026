@@ -1,0 +1,7 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+sources/*.txt
+out/prompts/
+out/mc_portfolio_losses.csv

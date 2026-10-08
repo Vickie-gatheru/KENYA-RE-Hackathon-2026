@@ -1,0 +1,19 @@
+# Kenya Re website palette and fonts (see brand.py). Fonts load from Google Fonts; offline they fall back cleanly.
+[theme]
+base = "light"
+primaryColor = "#C30D35"
+backgroundColor = "#FFFFFF"
+secondaryBackgroundColor = "#ECF0F4"
+textColor = "#041D3B"
+linkColor = "#C30D35"
+borderColor = "#D5DCE4"
+font = "Roboto:https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap"
+headingFont = "Archivo:https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&display=swap"
+baseRadius = "medium"
+
+[theme.sidebar]
+backgroundColor = "#041D3B"
+secondaryBackgroundColor = "#0B2B52"
+textColor = "#FFFFFF"
+primaryColor = "#E0627F"
+borderColor = "#1E3E66"

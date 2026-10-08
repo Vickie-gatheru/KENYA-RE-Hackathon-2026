@@ -1,0 +1,78 @@
+{
+  "model": "logistic regression",
+  "features": [
+    "proxy_score",
+    "proxy_mean_1km",
+    "proxy_max_500m",
+    "dist_river_km",
+    "dist_drain_km",
+    "road_density",
+    "informal"
+  ],
+  "positives": 56,
+  "background": 560,
+  "spatial_cv": {
+    "logistic regression": {
+      "roc_auc": 0.9310267857142857,
+      "pr_auc": 0.5324375422823744,
+      "base_rate": 0.09090909090909091,
+      "folds": 5
+    },
+    "gradient boosting": {
+      "roc_auc": 0.9178252551020408,
+      "pr_auc": 0.5148307783532101,
+      "base_rate": 0.09090909090909091,
+      "folds": 5
+    }
+  },
+  "held_out_hotspot_test": {
+    "auc_ml": 0.9042919910356216,
+    "auc_proxy": 0.536240858693088,
+    "hotspots_in_top_10pct_ml": 18,
+    "hotspots_in_top_10pct_proxy": 1,
+    "hotspots_in_top_20pct_ml": 21,
+    "hotspots_in_top_20pct_proxy": 5,
+    "auc_single_feature": {
+      "proxy_score": 0.5362,
+      "proxy_mean_1km": 0.6707,
+      "proxy_max_500m": 0.6699,
+      "dist_river_km": 0.7142,
+      "dist_drain_km": 0.826,
+      "road_density": 0.8947,
+      "informal": 0.5
+    },
+    "built_up_only": {
+      "auc_ml": 0.8314616285881664,
+      "auc_proxy": 0.5282952548330404,
+      "auc_road_density": 0.7908919156414764,
+      "n_city_points": 14225
+    }
+  },
+  "buffer_test": [
+    {
+      "buffer_km": 1.0,
+      "hotspots_with_training_place_within": 16,
+      "positives": 39,
+      "auc_ml": 0.9013,
+      "auc_proxy": 0.5362,
+      "hotspots_in_top_10pct_ml": 19
+    },
+    {
+      "buffer_km": 2.0,
+      "hotspots_with_training_place_within": 21,
+      "positives": 22,
+      "auc_ml": 0.9048,
+      "auc_proxy": 0.5362,
+      "hotspots_in_top_10pct_ml": 19
+    }
+  ],
+  "global_importance_shap": {
+    "distance to nearest river": 1.112,
+    "built-up / paved surface density": 0.8948,
+    "distance to nearest mapped drain": 0.7866,
+    "wet ground within 500 m": 0.2959,
+    "terrain/river score at the spot": 0.1651,
+    "how low-lying the neighbourhood is (1 km)": 0.0478,
+    "inside an informal settlement": 0.0
+  }
+}

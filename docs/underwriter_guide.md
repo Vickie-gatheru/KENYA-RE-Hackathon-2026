@@ -1,0 +1,37 @@
+# Underwriter guide to the Nairobi flood model
+
+## How a new risk or a flood claim is evaluated
+The evaluation page compares the site with the flood map and with nearby assessed assets. First it reads the map's flood-proneness score (hazard_score_common) at the exact location. Then it takes up to 10 nearby assessed assets within 1 km and averages their mapped scores, giving closer assets more weight. The two are blended: the site reading gets 60% weight when exact coordinates are given and 35% when the location comes from a place name, because a place name points to an area centre rather than the exact plot. The blended score sets how far each flood size reaches the site, which gives water depth, damage for the building type and the loss for each flood size, and from those the technical premium.
+For a claim, the claimed loss is compared with the modelled damage at the site. "Consistent" means the damage matches a flood of a plausible size (the implied return period is shown). "Unusually severe" means it is larger than the worst modelled flood. "Inconsistent" means it exceeds the maximum damage the building type can suffer. "Not supported by the map" means the map shows no flood hazard there; because the map cannot see blocked drains, this is a prompt to check the cause of loss, not a reason to decline.
+Confidence is High when exact coordinates were given, at least 5 assessed assets are within 1 km, and the map and the neighbours agree; it falls to Medium or Low as these weaken.
+
+## What the main numbers mean
+Technical premium (AAL): the average annual loss the model expects from flood for the portfolio or a risk. It is the pure cost of flood risk, before expenses, commission and profit, so it is a floor for pricing, not a price.
+Rate per mille: technical premium divided by insured value, times 1,000. KES 1.5 per mille means KES 1,500 of expected flood loss per KES 1,000,000 insured each year.
+1-in-100 loss (PML): the portfolio loss from a flood with roughly a 1% chance of happening in any year. It does not mean once every 100 years exactly. The 1-in-250 loss is a 0.4% chance event.
+EP curve (exceedance probability curve): the chart of loss against return period. Read along it to see how much worse losses get as floods get rarer.
+Ranges: the 5th to 95th percentile from the Monte Carlo simulation. They capture variation in damage between buildings and in the depth assumption, but not the return-period assumption.
+
+## Insured and reinsured loss
+Ground-up loss is the total flood damage. Insured loss (the cedant's gross loss) is what remains after each policy's deductible, assumed at 2% of the building's value with a minimum of KES 10,000, and capped at the policy limit (the full value). The treaty then splits each flood between the cedant and the reinsurer: with an assumed catastrophe excess-of-loss layer of KES 250 m in excess of KES 50 m, the cedant pays the first KES 50 m of each flood, the reinsurer the next KES 250 m, and the cedant anything above KES 300 m. An optional quota share cedes a fixed percentage of every loss. Technical rate on line is the layer's expected annual loss divided by its limit, before the reinsurer's expenses and profit. All policy and treaty terms are assumptions, because the data contains none; they can be changed on the Insurance & reinsurance page. With the hazard map alone, insured AAL is about KES 12.2 m against KES 13.8 m ground-up; the layer starts paying at about a 1-in-12 flood, is used up at about 1-in-107, and has an expected loss of KES 6.4 m a year (technical rate on line 2.6%).
+
+## How a loss is calculated
+For each building the model reads a flood score (0 to 1) from the hazard maps at its location, converts it to a water depth (score times 4 metres by default), passes the depth through a damage curve for the building type, and multiplies the damage percentage by the insured value. Losses are added across the portfolio for five flood sizes (1-in-10, 25, 50, 100 and 250 years) to form the EP curve.
+
+## Building types and damage
+Informal iron-sheet structures are badly damaged in shallow water. Semi-permanent buildings are next most vulnerable, then permanent masonry. Reinforced concrete (RCC) buildings withstand the most water before heavy damage. Damage is capped between 80 and 95 percent because land and foundations usually survive. The base curve is the published EU Joint Research Centre depth-damage function for residential buildings in Africa (Huizinga et al. 2017): about 22% damage at 0.5 m, 38% at 1 m, 64% at 2 m and 90% at 4 m of water. Permanent masonry uses it directly (capped at 85%). Informal iron-sheet buildings are treated as if the water were 60% deeper and semi-permanent 30% deeper; reinforced concrete as if 25% shallower. Those adjustments are the team's assumptions, not fitted to Kenyan claims. The spread of damage between buildings uses the JRC table's published standard deviation.
+
+## Where the hazard comes from
+The hazard maps are a proxy built from terrain (how low and flat the ground is) and distance to mapped rivers. They are not measured flood depth. They flag 12 of 24 government-named flood hotspots; the misses flood because of drainage failure, which terrain cannot show.
+
+## The AI layers
+Evidence layer: a language model reads cited flood reports, extracts places that flooded with a word-for-word quote as proof, and the model raises the hazard near those places. Quotes not found in the source are rejected.
+ML layer: a machine-learning model learns from those reported places and scores every location in Nairobi using terrain, distance to rivers and drains, built-up density and informal settlement areas. SHAP values explain each score.
+The 24 county hotspots are never used to build either layer; they are only used to test them.
+How well they work (first real run, October 2026): the evidence layer raises the number of county hotspots detected from 12 to 19 of 24 while touching about 7.5% of the city map. Moving the same evidence sites to random insured buildings detects 15.5 on average, so the reported places do carry information, but the margin over random placement is borderline (about a 5% chance of doing as well at random). Giving every site the same weight instead of the language model's severity and confidence scores detects 20, so the language model's value is in finding the places, not in grading them. The ML model ranks hotspots above ordinary locations with an AUC of 0.90 against 0.54 for the hazard map, but built-up density alone scores 0.89; among built-up areas only, the model scores 0.83 against 0.79 for density alone. Treat the AI layers as a useful prompt to look harder at a location, not as proof that it floods.
+
+## Accumulation
+Accumulation is many insured buildings exposed to the same flood. The model groups buildings into 2 km zones and ranks them by their share of the 1-in-100 loss. A zone with a large share of the loss but a small share of insured value is a concentration of high-hazard risk.
+
+## Limitations to keep in mind
+The portfolio is synthetic. Policy and treaty terms are assumed, not taken from real contracts. There is no claims data to calibrate against, so results are most reliable for ranking and comparing risks, areas and building types, and less reliable as exact amounts. The return-period assumption is the biggest single uncertainty: it changes the AAL several-fold. Rainfall, contents, business interruption and the drainage network itself are not modelled.

@@ -1,0 +1,25 @@
+name,base_score,base_flagged,uplift,nearest_site,ai_flagged
+Kiambiu,0.22885838,True,0.10554860663575918,Kamukunji,True
+Dandora,0.13889116,True,0.06166265033132292,Embakasi North,True
+Kariobangi,0.08686069,True,0.06780108729182859,Huruma,True
+Kayole,0.38380682,True,0.21374999999999997,Kayole,True
+Komarock,0.058353737,True,0.03286468381208579,Kayole,True
+Njiru,0.25003448,True,0.0,,True
+Ruai,0.06448159,True,0.0,,True
+Mwiki,0.1942743,True,0.0,,True
+Donholm,0.0,False,0.053512141867196425,Kware Road,True
+Tassia,0.08869533,True,0.06252541775184332,Kware Road,True
+Fedha,0.0,False,0.1325218485944504,Pipeline,True
+Madaraka,0.0,False,0.0682712170090512,Nairobi West,True
+Nairobi West,0.06836303,True,0.135,Nairobi West,True
+Lang'ata,0.0,False,0.04603290964359484,Lang’ata Road,False
+Kawangware,0.0,False,0.0,,False
+Kangemi,0.0,False,0.0,,False
+Lavington,0.0,False,0.09826198172479043,Dagoretti North,True
+Westlands,0.0,False,0.22477499999999997,Westlands,True
+Parklands,0.0,False,0.07402064970410613,Nairobi Expressway,True
+Kitisuru,0.0,False,0.012258039594547044,Westlands,False
+Kileleshwa,0.0,False,0.02099392041783949,Dagoretti North,False
+Chiromo,0.17619404,True,0.13825417237781185,Nairobi Expressway,True
+Mathare,0.14849377,True,0.22499831249999996,Mathare,True
+Kibera,0.0,False,0.08164443626783897,Kibra,True

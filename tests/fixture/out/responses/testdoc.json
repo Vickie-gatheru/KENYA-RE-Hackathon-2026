@@ -1,0 +1,8 @@
+{"signals": [
+ {"place_name": "Testville Estate", "place_type": "estate", "mechanism": "drainage_blockage", "severity": 2, "event_date": null,
+  "evidence_quote": "Heavy rain on Tuesday left Testville Estate under water after drains were blocked by rubbish.", "confidence": 0.9},
+ {"place_name": "Example Road", "place_type": "road", "mechanism": "unknown", "severity": 2, "event_date": null,
+  "evidence_quote": "Shops along Example Road were badly flooded.", "confidence": 0.8},
+ {"place_name": "Imaginary Plaza", "place_type": "landmark", "mechanism": "unknown", "severity": 3, "event_date": null,
+  "evidence_quote": "Heavy rain on Tuesday left Testville Estate under water after drains were blocked by rubbish.", "confidence": 0.7}
+]}

@@ -1,0 +1,259 @@
+{
+  "label": "MAIN RUN",
+  "tags": "exposure SYNTHETIC | hazard PROXY | vulnerability, depth scale, return periods ASSUMED | losses are GROUND-UP (before deductibles/limits)",
+  "total_tiv_kes": 6363470000.0,
+  "n_buildings": 600,
+  "baseline": {
+    "loss_kes_m": {
+      "10": 47.1,
+      "25": 83.2,
+      "50": 195.8,
+      "100": 326.8,
+      "250": 504.8
+    },
+    "p5_kes_m": {
+      "10": 30.4,
+      "25": 58.5,
+      "50": 147.0,
+      "100": 249.0,
+      "250": 385.5
+    },
+    "p95_kes_m": {
+      "10": 65.3,
+      "25": 109.3,
+      "50": 246.6,
+      "100": 407.6,
+      "250": 630.9
+    },
+    "aal_kes_m": 13.8,
+    "aal_range_kes_m": [
+      10.2,
+      17.6
+    ]
+  },
+  "rp_mapping_sensitivity": [
+    {
+      "mapping": "reference (10-250y)",
+      "aal_kes_m": 13.8,
+      "loss_100y_kes_m": 326.8,
+      "loss_250y_kes_m": 504.8
+    },
+    {
+      "mapping": "more frequent (5-100y)",
+      "aal_kes_m": 29.3,
+      "loss_100y_kes_m": 504.8,
+      "loss_250y_kes_m": null
+    },
+    {
+      "mapping": "rarer (25-500y)",
+      "aal_kes_m": 6.1,
+      "loss_100y_kes_m": 195.8,
+      "loss_250y_kes_m": 326.8
+    }
+  ],
+  "ai": {
+    "signals_in": 88,
+    "sites_used": 41,
+    "settings": {
+      "w_max": 0.3,
+      "sigma_km": 0.75,
+      "tau": 0.05,
+      "mechanisms": [
+        "drainage_blockage",
+        "encroachment_on_drainage",
+        "impervious_runoff",
+        "inadequate_drainage_capacity",
+        "unknown"
+      ]
+    },
+    "hotspot_recall": {
+      "baseline": "12/24",
+      "ai": "19/24",
+      "uniform_ablation": "20/24",
+      "newly_detected": [
+        "Donholm",
+        "Fedha",
+        "Madaraka",
+        "Lavington",
+        "Westlands",
+        "Parklands",
+        "Kibera"
+      ],
+      "still_missed": [
+        "Lang'ata",
+        "Kawangware",
+        "Kangemi",
+        "Kitisuru",
+        "Kileleshwa"
+      ],
+      "placebo": {
+        "random_buildings": {
+          "observed": 19,
+          "placebo_mean": 15.5,
+          "placebo_p95": 18,
+          "placebo_max": 21,
+          "p_value": 0.048,
+          "n_runs": 500
+        },
+        "random_city_points": {
+          "observed": 19,
+          "placebo_mean": 13.1,
+          "placebo_p95": 15,
+          "placebo_max": 18,
+          "p_value": 0.0,
+          "n_runs": 500
+        }
+      }
+    },
+    "footprint_ai": {
+      "buildings_uplifted": 152,
+      "pct_buildings": 25.333333333333336,
+      "pct_tiv": 30.10786567705984,
+      "pct_city_area": 7.529761904761904,
+      "pct_city_area_newly_wet": 3.5000000000000004
+    },
+    "footprint_uniform": {
+      "buildings_uplifted": 185,
+      "pct_buildings": 30.833333333333336,
+      "pct_tiv": 32.61577409809428,
+      "pct_city_area": 9.15873015873016,
+      "pct_city_area_newly_wet": 4.376984126984127
+    },
+    "loss_kes_m": {
+      "baseline": {
+        "10": 47.1,
+        "25": 83.2,
+        "50": 195.8,
+        "100": 326.8,
+        "250": 504.8
+      },
+      "ai": {
+        "10": 74.3,
+        "25": 120.1,
+        "50": 275.0,
+        "100": 445.8,
+        "250": 735.1
+      },
+      "uniform_ablation": {
+        "10": 78.4,
+        "25": 140.4,
+        "50": 323.7,
+        "100": 531.8,
+        "250": 820.8
+      }
+    },
+    "aal_kes_m": {
+      "baseline": 13.8,
+      "ai": 19.9,
+      "uniform_ablation": 22.8
+    },
+    "ai_100y_range_kes_m": [
+      340.0,
+      555.2
+    ],
+    "sites_far_from_validation_hotspots": [
+      "Central Business District",
+      "Dagoretti",
+      "Embakasi",
+      "Githurai",
+      "Kahawa West",
+      "Kasarani",
+      "Kirinyaga Road",
+      "Langata",
+      "Langata Road",
+      "Lunga Lunga Road",
+      "Mombasa Road",
+      "Mukuru",
+      "Pipeline/Embakasi",
+      "Roysambu",
+      "Thika Road",
+      "central business district"
+    ],
+    "signals_by_mechanism": {
+      "unknown": 39,
+      "river_overflow": 22,
+      "drainage_blockage": 11,
+      "encroachment_on_drainage": 7,
+      "inadequate_drainage_capacity": 7,
+      "impervious_runoff": 2
+    }
+  },
+  "financial": {
+    "terms_ASSUMED": {
+      "ded_pct": 0.02,
+      "ded_min": 10000,
+      "limit_pct": 1.0,
+      "qs": 0.0,
+      "retention": 50000000.0,
+      "limit": 250000000.0
+    },
+    "hazard": "AI-adjusted",
+    "loss_kes_m": {
+      "ground_up": {
+        "10": 74.3,
+        "25": 120.1,
+        "50": 275.0,
+        "100": 445.8,
+        "250": 735.1
+      },
+      "policyholder": {
+        "10": 5.7,
+        "25": 15.3,
+        "50": 30.3,
+        "100": 55.9,
+        "250": 89.1
+      },
+      "gross": {
+        "10": 68.6,
+        "25": 104.8,
+        "50": 244.6,
+        "100": 389.9,
+        "250": 646.0
+      },
+      "qs_ceded": {
+        "10": 0.0,
+        "25": 0.0,
+        "50": 0.0,
+        "100": 0.0,
+        "250": 0.0
+      },
+      "xl_ceded": {
+        "10": 18.6,
+        "25": 54.8,
+        "50": 194.6,
+        "100": 250.0,
+        "250": 250.0
+      },
+      "reinsurer": {
+        "10": 18.6,
+        "25": 54.8,
+        "50": 194.6,
+        "100": 250.0,
+        "250": 250.0
+      },
+      "net": {
+        "10": 50.0,
+        "25": 50.0,
+        "50": 50.0,
+        "100": 139.9,
+        "250": 396.0
+      }
+    },
+    "aal_kes_m": {
+      "ground_up": 19.9,
+      "policyholder": 2.3,
+      "gross": 17.6,
+      "qs_ceded": 0.0,
+      "xl_ceded": 9.4,
+      "reinsurer": 9.4,
+      "net": 8.1
+    },
+    "xl_layer": {
+      "expected_loss_kes_m": 9.4,
+      "technical_rate_on_line_pct": 3.77,
+      "attaches_at_rp": 0.0,
+      "exhausted_at_rp": 65.1
+    }
+  },
+  "runtime_s": 178.0
+}

@@ -1,0 +1,6 @@
+place_name,place_type,mechanism,severity,event_date,evidence_quote,confidence,source_id,source_title,source_url,source_date,lat,lon
+TEST site A,estate,drainage_blockage,3,,TEST,0.9,test1,TEST FIXTURE,,,-1.3125,36.7870
+TEST site A,estate,inadequate_drainage_capacity,2,,TEST,0.6,test2,TEST FIXTURE,,,-1.3125,36.7870
+TEST site B,road,inadequate_drainage_capacity,2,,TEST,0.8,test1,TEST FIXTURE,,,-1.2480,36.7880
+TEST site C,road,unknown,1,,TEST,0.5,test2,TEST FIXTURE,,,-1.2000,36.8600
+TEST site D,neighbourhood,river_overflow,3,,TEST,0.9,test1,TEST FIXTURE,,,-1.2600,36.7600

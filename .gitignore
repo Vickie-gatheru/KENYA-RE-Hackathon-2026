@@ -5,3 +5,7 @@ __pycache__/
 sources/*.txt
 out/prompts/
 out/mc_portfolio_losses.csv
+Referencedoc
+_bmad-output/
+_bmad
+.agents

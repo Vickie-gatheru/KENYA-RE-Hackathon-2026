@@ -54,6 +54,14 @@ h1 {{ border-bottom: 3px solid {CRIMSON}; padding-bottom: .25rem; display: inlin
   box-shadow: 0 2px 10px rgba(195, 13, 53, .45); }}
 [data-testid="stSidebar"] label[data-testid="stRadioOption"]:has(input:checked) p,
 [data-testid="stSidebar"] label[data-testid="stRadioOption"]:has(input:checked) p span {{ color: #FFFFFF !important; font-weight: 700; }}
+[data-testid="stSidebar"] [data-testid="stExpander"] summary,
+[data-testid="stSidebar"] [data-testid="stExpander"] summary p,
+[data-testid="stSidebar"] [data-testid="stExpander"] summary svg,
+[data-testid="stSidebar"] [data-testid="stExpander"] [data-testid="stMarkdown"],
+[data-testid="stSidebar"] [data-testid="stExpander"] [data-testid="stCaptionContainer"],
+[data-testid="stSidebar"] [data-testid="stExpander"] label,
+[data-testid="stSidebar"] [data-testid="stExpander"] label p,
+[data-testid="stSidebar"] [data-testid="stExpander"] label span {{ color: {NAVY} !important; }}
 /* navy carries the layout, crimson is the accent */
 [data-testid="stMetric"] {{ background: #F4F7FB; border: 1px solid {GRID}; border-left: 4px solid {NAVY};
   border-radius: 12px; padding: .8rem 1rem; }}

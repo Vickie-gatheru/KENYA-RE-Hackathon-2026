@@ -30,6 +30,16 @@ res.append(ok(np.all(det["dr"] <= 0.95 + 1e-9) and np.all(det["dr"][det["depth"]
 _, mc = cm.simulate(d, n_sims=1000, vary_depth_scale=False)
 res.append(ok(np.allclose(mc.mean(0), port, rtol=0.03), "Monte Carlo mean within 3% of central estimate"))
 res.append(ok(np.all(np.diff(mc, axis=1) >= -1e-6), "loss rises with return period in every simulation"))
+ep1, aal1, _ = cm.with_rp_uncertainty(mc, weights={"reference (10-250y)": 1.0})
+res.append(ok(np.allclose(ep1, mc) and np.allclose(aal1, cm.aal_from_ep(det["rps"], mc)),
+              "return-period mixture: all weight on the reference reproduces the plain Monte Carlo"))
+rare = cm.RP_MAPPINGS["rarer (25-500y)"]
+ep2, aal2, _ = cm.with_rp_uncertainty(mc, weights={"rarer (25-500y)": 1.0})
+res.append(ok(np.allclose(aal2, cm.aal_from_ep(np.array(sorted(rare.values())), mc)) and (ep2[:, 0] == 0).all()
+              and np.allclose(ep2[:, 1], mc[:, 0]), "return-period mixture: rarer mapping re-reads losses at its own years"))
+_, aalm, _ = cm.with_rp_uncertainty(mc)
+res.append(ok(np.percentile(aalm, 95) - np.percentile(aalm, 5) > np.percentile(aal1, 95) - np.percentile(aal1, 5),
+              "AAL range widens once the return-period assumption is included"))
 for name, m in cm.RP_MAPPINGS.items():
     pr = cm.deterministic(d, tier_rp=m)["loss"].sum(0)
     res.append(ok(np.all(np.diff(pr) > 0), f"loss rises with RP under mapping '{name}'"))
@@ -96,6 +106,17 @@ res.append(ok(len(kept) == 1 and kept[0]["place_name"] == "Testville Estate", "v
 reasons = {r["place_name"]: r["reject_reason"] for r in rej}
 res.append(ok("not found verbatim" in reasons.get("Example Road", ""), "paraphrased quote rejected"))
 res.append(ok("place_name not in source" in reasons.get("Imaginary Plaza", ""), "invented place rejected"))
+fsrc = dict(source_id="TEST", title="TEST", url="", date="", text=(
+    "Weather alerts had indicated heavy rain across Testville Estate. Residents had been warned, but homes in "
+    "Example Road were flooded overnight. Imaginary Plaza is prone to flooding every rainy season."))
+fsig = lambda place, q: dict(place_name=place, place_type="estate", mechanism="drainage_blockage", severity=2,
+                             evidence_quote=q, confidence=0.9)
+fk, fr = ex.validate([fsig("Testville Estate", "Weather alerts had indicated heavy rain across Testville Estate."),
+                      fsig("Example Road", "Residents had been warned, but homes in Example Road were flooded overnight."),
+                      fsig("Imaginary Plaza", "Imaginary Plaza is prone to flooding every rainy season.")], fsrc)
+res.append(ok([r["place_name"] for r in fr] == ["Testville Estate"] and "forecast" in fr[0]["reject_reason"]
+              and {k["place_name"] for k in fk} == {"Example Road", "Imaginary Plaza"},
+              "forecast-only quote rejected; past flooding and 'flood-prone' statements kept"))
 lst = " ".join(ex.HOTSPOT_NAMES[:12]) + " flood-prone areas"
 res.append(ok(ex.looks_like_hotspot_list(lst)[0], "hotspot-list leak guard triggers"))
 
@@ -194,6 +215,14 @@ out = A.run(ctx, "How bad could it get?", [], lambda p: next(script))
 res.append(ok([t["tool"] for t in out["trace"]] == ["portfolio_summary", "search_docs"],
               "assistant: calls tools, recovers from bad JSON and unknown tools"))
 res.append(ok(out["unverified"] == ["7777"], "assistant: flags invented numbers, accepts rounded real ones"))
+ctr = [dict(tool="portfolio_summary", args={}, result={"AAL": "KES 13.8 m", "ep_curve": {"1-in-100": "KES 326.8 m"}}),
+       dict(tool="search_docs", args={}, result={"passages": [{"source": "guide", "section": "Limits",
+             "text": "The return-period assumption is the biggest single uncertainty in the model results."}]})]
+ctext, csrc = A.cite("AAL is KES 13.8 m and a 1-in-100 flood costs KES 327 m; a 1-in-250 costs KES 999 m. "
+                     "The return-period assumption is the biggest single uncertainty.", ctr)
+res.append(ok([c["field"] for c in csrc if c["kind"] == "tool"] == ["AAL", "ep curve › 1-in-100"]
+              and any(c["kind"] == "doc" for c in csrc) and "999 m." in ctext and ctext.count("kre-cite") == 3,
+              "citations: numbers traced to their source, documentation matched, invented number left uncited"))
 sd = A.search_docs(ctx, "what does technical premium mean")
 res.append(ok(sd["passages"] and "underwriter_guide" in sd["passages"][0]["source"], "assistant: RAG retrieves the right document"))
 pr = A.price_risk(ctx, "4-storey apartment block", value_kes=80e6, place_name="Kibera")

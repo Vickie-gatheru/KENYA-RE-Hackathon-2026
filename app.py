@@ -3,12 +3,17 @@ For the LLM features (quote from text, memo), set the provider in the same termi
     $env:LLM_PROVIDER="groq"; $env:GROQ_API_KEY="gsk_..."
 """
 import json, os
-import numpy as np
-import pandas as pd
-import plotly.graph_objects as go
 import streamlit as st
 
 import brand
+# page setup and the loading overlay come before the heavy imports, so a cold start shows the animated logo at once
+st.set_page_config(page_title="Nairobi Flood Risk Workbench", page_icon=brand.MARK_PATH, layout="wide")
+st.markdown(brand.loader(), unsafe_allow_html=True)
+
+import numpy as np
+import pandas as pd
+import plotly.graph_objects as go
+
 import catmodel as cm
 import financial as fin
 import features as F
@@ -22,7 +27,6 @@ import underwriting as uw
 HERE = os.path.dirname(os.path.abspath(__file__))
 DATA = os.path.join(HERE, "data")
 BLUE, ACCENT, INK, MUTED, GRID = brand.BLUE, brand.CRIMSON, brand.INK, brand.MUTED, brand.GRID
-st.set_page_config(page_title="Nairobi Flood Risk Workbench", layout="wide")
 
 
 # ================================================================== data + model (cached)
@@ -43,9 +47,16 @@ def run_model(d, tier_rp_items, depth_scale, n_sims):
     _, sims = cm.simulate(d, n_sims=n_sims, tier_rp=tier_rp)
     cm.DEPTH_SCALE_RANGE = old
     port = det["loss"].sum(0)
-    return dict(rps=det["rps"], loss=det["loss"], port=port, sims=sims,
+    ep_rp, aal_rp, _ = cm.with_rp_uncertainty(sims, tier_rp)      # ranges that include the return-period assumption
+    return dict(rps=det["rps"], loss=det["loss"], port=port, sims=sims, sims_rp=ep_rp, aal_sims_rp=aal_rp,
                 aal=float(cm.aal_from_ep(det["rps"], port)), aal_sims=cm.aal_from_ep(det["rps"], sims),
                 affected=(det["depth"] > 0).sum(0))
+
+
+def kes_range(lo, hi):
+    """'KES 343 m – 1,016 m' (one currency word, one unit when both ends share it)."""
+    a, b = kes(lo), kes(hi)
+    return f"{a} – {b[4:]}" if a.split()[-1] == b.split()[-1] else f"{a} – {b}"
 
 
 def kes(x, unit="m"):
@@ -76,7 +87,48 @@ def run_financial(d, terms_items, tier_rp_items, depth_scale, n_sims):
     cm.DEPTH_SCALE_RANGE = (depth_scale * 0.75, depth_scale, depth_scale * 1.25)
     _, sims = fin.simulate(d, terms, n_sims=n_sims, tier_rp=tier_rp)
     cm.DEPTH_SCALE_RANGE = old
+    sims = {k: cm.with_rp_uncertainty(v, tier_rp)[0] for k, v in sims.items()}   # same seed: one mapping per run
     return det["rps"], layers, sims, fin.layer_metrics(det["rps"], layers, terms)
+
+
+@st.cache_data
+def source_table(raw_mtime):
+    """One row per article in data/sources.csv: link, what happened to it, signals kept and rejected (why)."""
+    import extract as ex
+    src = pd.read_csv(os.path.join(DATA, "sources.csv"))
+    p = os.path.join(HERE, "out", "signals_raw.json")
+    rj = json.load(open(p, encoding="utf-8")) if os.path.exists(p) else {"signals": [], "rejected": []}
+    kept = pd.Series([x["source_id"] for x in rj["signals"]]).value_counts()
+    rej = {}
+    for x in rj["rejected"]:
+        rej.setdefault(x.get("source_id", ""), []).append(x.get("reject_reason", "?"))
+    rows = []
+    for r in src.itertuples():
+        f = os.path.join(HERE, "sources", f"{r.source_id}.txt")
+        text = ex.read_source(f)["text"] if os.path.exists(f) else ""
+        n_k, reasons = int(kept.get(r.source_id, 0)), rej.get(r.source_id, [])
+        if len(text) < 400:
+            status = "Not read: could not download (paste text by hand)"
+        elif ex.looks_like_hotspot_list(text)[0]:
+            status = "Skipped: copies the county hotspot list (held out for testing)"
+        elif n_k:
+            status = "Used"
+        elif reasons:
+            status = "Read: every signal rejected"
+        else:
+            status = "Read: no qualifying flood evidence"
+        plain = {"evidence_quote not found verbatim in source": "quote not in the article",
+                 "place_name not in source": "place not named in the article",
+                 "forecast or warning, not a report of flooding": "forecast, not a flood report"}
+        why = ", ".join(f"{n}× {plain.get(k, k)}" for k, n in
+                        pd.Series([x.split(" (")[0] for x in reasons]).value_counts().items())
+        places = sorted({x["place_name"] for x in rj["signals"] if x["source_id"] == r.source_id})
+        rows.append({"article": r.title, "original": r.url, "status": status, "signals kept": n_k,
+                     "rejected": len(reasons), "why rejected": why, "places named": ", ".join(places[:8]) +
+                     (f" +{len(places) - 8} more" if len(places) > 8 else "")})
+    order = {"Used": 0}
+    return pd.DataFrame(rows).sort_values(["status", "signals kept"], key=lambda c: c.map(order).fillna(1)
+                                          if c.name == "status" else -c).reset_index(drop=True)
 
 
 @st.cache_data
@@ -190,26 +242,30 @@ if page == 'Evaluate a risk or claim':
 
 # ================================================================== 1. portfolio overview
 if page == 'Portfolio overview':
-    k = st.columns(5)
-    k[0].metric("Total insured value", kes(tiv, "bn")); k[0].caption(f"{len(d)} buildings")
-    k[1].metric("Technical premium (AAL)", kes(cur["aal"]))
-    k[1].caption(f"rate {cur['aal'] / tiv * 1000:.2f} ‰ · range {kes(pct(cur['aal_sims'], 5))}–{kes(pct(cur['aal_sims'], 95))}")
-    for col, jj in ((k[2], j100), (k[3], jtop)):
-        col.metric(f"1-in-{rps[jj]} loss (PML)", kes(cur["port"][jj]))
-        col.caption(f"range {kes(pct(cur['sims'][:, jj], 5))}–{kes(pct(cur['sims'][:, jj], 95))}")
+    r95 = lambda arr: kes_range(pct(arr, 5), pct(arr, 95))
+    flooded = f"{int(cur['affected'][j100])} of {len(d)} buildings flooded"
+    cards = [dict(label="Total insured value", value=kes(tiv, "bn"), sub=[f"{len(d)} buildings", "SYNTHETIC portfolio"]),
+             dict(label="Premium per year (AAL)", value=kes(cur["aal"]),
+                  sub=[f"rate {cur['aal'] / tiv * 1000:.2f} ‰", f"range {r95(cur['aal_sims_rp'])}"]),
+             dict(label=f"1-in-{rps[j100]} flood loss", value=kes(cur["port"][j100]), key=True,
+                  sub=[f"1% chance a year · {flooded}", f"range {r95(cur['sims_rp'][:, j100])}"]),
+             dict(label=f"1-in-{rps[jtop]} flood loss", value=kes(cur["port"][jtop]),
+                  sub=[f"{100 / rps[jtop]:.1f}% chance a year", f"range {r95(cur['sims_rp'][:, jtop])}"])]
     if use_ai and tech:
-        k[4].metric("County flood hotspots detected", f"{int(rec.ai_flagged.sum())} / 24")
-        k[4].caption(f"proxy alone {int(rec.base_flagged.sum())} / 24 · {fp.get('pct_city_area', 0):.1f}% of map uplifted")
-    else:
-        k[4].metric(f"Buildings flooded at 1-in-{rps[j100]}", f"{int(cur['affected'][j100])} / {len(d)}")
+        cards.append(dict(label="County flood hotspots detected", value=f"{int(rec.ai_flagged.sum())} / 24",
+                          sub=[f"map alone {int(rec.base_flagged.sum())} / 24", f"{fp.get('pct_city_area', 0):.1f}% of map raised"]))
+    st.markdown(brand.kpis(cards), unsafe_allow_html=True)
     st.caption("Technical premium = modelled average annual loss: the pure cost of flood, before expenses and profit. "
-               + ("Ranges are the 5th–95th percentile of the Monte Carlo and exclude the return-period assumption "
-                  "(see Sensitivity)." if tech else "Ranges show how uncertain each figure is (5th–95th percentile)."))
+               + (f"Ranges are the 5th–95th percentile of the Monte Carlo, which varies damage, depth and which years each "
+                  f"map tier represents (the biggest assumption; weights on the Sensitivity page). Without that last one the "
+                  f"AAL range would be {kes(pct(cur['aal_sims'], 5))}–{kes(pct(cur['aal_sims'], 95))}." if tech else
+                  "Ranges show how uncertain each figure is (5th–95th percentile), including how often each flood "
+                  "size really happens - the biggest uncertainty in the model."))
 
     fig = go.Figure()
     for name, r, c in ([("Proxy only", base, BLUE)] + ([("With AI hazard layer", cur, ACCENT)] if use_ai else [])
                        if tech else [("Portfolio flood loss", cur, BLUE)]):
-        p5, p95 = np.percentile(r["sims"], 5, axis=0), np.percentile(r["sims"], 95, axis=0)
+        p5, p95 = np.percentile(r["sims_rp"], 5, axis=0), np.percentile(r["sims_rp"], 95, axis=0)
         fig.add_trace(go.Scatter(x=np.r_[rps, rps[::-1]], y=np.r_[p95, p5[::-1]] / 1e6, fill="toself", mode="lines",
                                  fillcolor=c, opacity=0.13, line=dict(width=0), hoverinfo="skip", showlegend=False))
         fig.add_trace(go.Scatter(x=rps, y=r["port"] / 1e6, name=name, mode="lines+markers",
@@ -220,53 +276,60 @@ if page == 'Portfolio overview':
                                                "<extra>" + name + "</extra>"))
     fig.update_xaxes(type="log", tickvals=rps, ticktext=[f"1-in-{r}" for r in rps], title="Return period (rarer →)",
                      showgrid=False, linecolor=GRID)
-    fig.update_yaxes(title="Portfolio loss (KES million)", gridcolor=GRID, rangemode="tozero")
-    fig.update_layout(template=brand.TEMPLATE, height=340, margin=dict(l=10, r=10, t=40, b=10), hovermode="x unified",
+    ytop = max(float(np.percentile(r["sims_rp"], 95, axis=0).max()) for r in ([base, cur] if tech and use_ai else [cur])) / 1e6
+    fig.update_yaxes(title="Portfolio loss (KES million)", gridcolor=GRID, range=[0, ytop * 1.08])   # whole band in view
+    fig.update_layout(template=brand.TEMPLATE, height=380, margin=dict(l=10, r=10, t=56, b=10), hovermode="x unified",
                       title=dict(text="How big could a flood loss be? (shaded: 5–95% range)", font=dict(size=15)),
                       legend=dict(orientation="h", y=1.02, x=1, xanchor="right", yanchor="bottom"))
     st.plotly_chart(fig, use_container_width=True)
     st.caption(f"Read it as: in any year there is a {100 / rps[j100]:.0f}% chance this portfolio loses more than "
-               f"{kes(cur['port'][j100])} to flooding.")
-    st.divider()
-    rt = uw.rate_table(d_cur, "housing_class", rps, loss_cur, j100).sort_values("rate_per_mille")
-    port_rate = cur["aal"] / tiv * 1000
-    fb = go.Figure(go.Bar(x=rt.rate_per_mille, y=rt.housing_class.map(evaluate_page.NICE), orientation="h",
-                          marker=dict(color=BLUE, cornerradius=4),
-                          text=[f"{v:.2f} ‰" for v in rt.rate_per_mille], textposition="outside",
-                          hovertemplate="%{y}: %{x:.2f} per mille<extra></extra>"))
-    fb.add_vline(x=port_rate, line=dict(color=MUTED, dash="dot"),
-                 annotation_text=f"portfolio {port_rate:.2f} ‰", annotation_position="top")
-    fb.update_layout(template=brand.TEMPLATE, height=280, margin=dict(l=10, r=60, t=40, b=10),
-                     title="Technical flood rate by building type (KES per 1,000 insured)", xaxis_title="per mille")
-    st.plotly_chart(fb, use_container_width=True)
-    if tech:
-        st.dataframe(rt.rename(columns={"housing_class": "building type", "insured_kes": "insured (KES)",
-                                        "technical_premium_kes": "technical premium (KES)",
-                                        "loss_100y_kes": f"1-in-{rps[j100]} loss (KES)", "rate_per_mille": "rate ‰"})
-                     .style.format({"insured (KES)": "{:,.0f}", "technical premium (KES)": "{:,.0f}",
-                                    f"1-in-{rps[j100]} loss (KES)": "{:,.0f}", "rate ‰": "{:.2f}"}),
+               f"{kes(cur['port'][j100])} to flooding - the figure to budget for at the 1-in-{rps[j100]} level. "
+               "**ASSUMED:** the five flood-map tiers have no years attached, so the model treats them as the "
+               + ", ".join(f"1-in-{tier_rp[t]}" for t in sorted(tier_rp, key=tier_rp.get))
+               + "-year floods (the widest map = the rarest flood).")
+    t_type, t_risks, t_memo = st.tabs(["By building type", "Highest-cost risks", "AI portfolio memo"])
+    with t_type:
+        rt = uw.rate_table(d_cur, "housing_class", rps, loss_cur, j100).sort_values("rate_per_mille")
+        port_rate = cur["aal"] / tiv * 1000
+        fb = go.Figure(go.Bar(x=rt.rate_per_mille, y=rt.housing_class.map(evaluate_page.NICE), orientation="h",
+                              marker=dict(color=BLUE, cornerradius=4),
+                              text=[f"{v:.2f} ‰" for v in rt.rate_per_mille], textposition="outside",
+                              hovertemplate="%{y}: %{x:.2f} per mille<extra></extra>"))
+        fb.add_vline(x=port_rate, line=dict(color=MUTED, dash="dot"),
+                     annotation_text=f"portfolio {port_rate:.2f} ‰", annotation_position="top")
+        fb.update_layout(template=brand.TEMPLATE, height=280, margin=dict(l=10, r=60, t=40, b=10),
+                         title="Technical flood rate by building type (KES per 1,000 insured)", xaxis_title="per mille")
+        st.plotly_chart(fb, use_container_width=True)
+        if tech:
+            st.dataframe(rt.rename(columns={"housing_class": "building type", "insured_kes": "insured (KES)",
+                                            "technical_premium_kes": "technical premium (KES)",
+                                            "loss_100y_kes": f"1-in-{rps[j100]} loss (KES)", "rate_per_mille": "rate ‰"})
+                         .style.format({"insured (KES)": "{:,.0f}", "technical premium (KES)": "{:,.0f}",
+                                        f"1-in-{rps[j100]} loss (KES)": "{:,.0f}", "rate ‰": "{:.2f}"}),
+                         hide_index=True, use_container_width=True)
+        st.caption("A flat rate across the book would undercharge informal and masonry buildings and overcharge concrete. "
+                   "The technical rate is a floor: add expense and profit loads on top.")
+    with t_risks:
+        st.caption("The ten buildings with the highest expected flood cost per year.")
+        b = d_cur.assign(aal=uw.building_aal(rps, loss_cur))
+        b["rate ‰"] = b.aal / b.tiv_kes * 1000
+        st.dataframe(b.nlargest(10, "aal")[["loc_id", "housing_class", "tiv_kes", "aal", "rate ‰"]]
+                     .assign(housing_class=lambda x: x.housing_class.map(evaluate_page.NICE))
+                     .rename(columns={"loc_id": "building", "housing_class": "type", "tiv_kes": "insured (KES)",
+                                      "aal": "technical premium (KES)"})
+                     .style.format({"insured (KES)": "{:,.0f}", "technical premium (KES)": "{:,.0f}", "rate ‰": "{:.1f}"}),
                      hide_index=True, use_container_width=True)
-    st.caption("A flat rate across the book would undercharge informal and masonry buildings and overcharge concrete. "
-               "The technical rate is a floor: add expense and profit loads on top.")
-    st.markdown("**Highest-cost individual risks**")
-    b = d_cur.assign(aal=uw.building_aal(rps, loss_cur))
-    b["rate ‰"] = b.aal / b.tiv_kes * 1000
-    st.dataframe(b.nlargest(10, "aal")[["loc_id", "housing_class", "tiv_kes", "aal", "rate ‰"]]
-                 .assign(housing_class=lambda x: x.housing_class.map(evaluate_page.NICE))
-                 .rename(columns={"loc_id": "building", "housing_class": "type", "tiv_kes": "insured (KES)",
-                                  "aal": "technical premium (KES)"})
-                 .style.format({"insured (KES)": "{:,.0f}", "technical premium (KES)": "{:,.0f}", "rate ‰": "{:.1f}"}),
-                 hide_index=True, use_container_width=True)
 
-    with st.expander("Underwriter memo (AI-written portfolio summary)"):
+    with t_memo:
+        st.caption("An AI-written summary for an underwriter. It may only use the facts below, and every number is checked.")
         rt_all = uw.rate_table(d_cur, "housing_class", rps, loss_cur, j100)
         zt_all = uw.rate_table(d_cur.join(uw.zones(d_cur, hs)), "zone_label", rps, loss_cur, j100) \
             .sort_values("loss_100y_kes", ascending=False)
         facts = {
             "portfolio": f"{len(d)} synthetic buildings, insured value {kes(tiv, 'bn')}",
             "technical premium (AAL)": f"{kes(cur['aal'])}, rate {cur['aal'] / tiv * 1000:.2f} per mille",
-            f"1-in-{rps[j100]} loss": f"{kes(cur['port'][j100])} (range {kes(pct(cur['sims'][:, j100], 5))} to "
-                                       f"{kes(pct(cur['sims'][:, j100], 95))})",
+            f"1-in-{rps[j100]} loss": f"{kes(cur['port'][j100])} (range {kes(pct(cur['sims_rp'][:, j100], 5))} to "
+                                       f"{kes(pct(cur['sims_rp'][:, j100], 95))}, including the return-period assumption)",
             f"1-in-{rps[jtop]} loss": kes(cur["port"][jtop]),
             "rates by building type": {r.housing_class: f"{r.rate_per_mille:.2f} per mille" for r in rt_all.itertuples()},
             "largest zones by 1-in-100 loss": [f"{r.zone_label}: {kes(r.loss_100y_kes)}" for r in zt_all.head(3).itertuples()],
@@ -298,9 +361,22 @@ if page == 'Portfolio overview':
 
 # ================================================================== 1b. insurance & reinsurance (financial engine)
 if page == 'Insurance & reinsurance':
-    st.markdown("From **total flood damage** to **what the insurer pays** (after each policy's deductible and limit) to "
-                "**what the reinsurer pays** under the treaty. The exposure file has no policy or treaty terms, so all "
-                "terms below are **ASSUMED** - change them to test a programme.")
+    st.markdown("From **ground-up loss** (total flood damage) to **gross loss** (what the insurer owes after each policy's "
+                "deductible and limit) to **net loss** (what the insurer keeps after its reinsurers pay). The exposure file has "
+                "no policy or treaty terms, so all terms below are **ASSUMED** - change them to test a programme.")
+    with st.expander("What the terms mean"):
+        st.markdown("\n".join([
+            "- **Ground-up loss** - the total physical damage to a building before any insurance rules are applied.",
+            f"- **Deductible** - the part of the loss the building owner pays before the insurer pays. "
+            f"Here: {fin.DED_PCT:.0%} of the building's value, at least KES {fin.DED_MIN_KES:,.0f}.",
+            "- **Limit** - the most the insurer pays for one building. Here: its full insured value.",
+            "- **Gross loss** - what the insurer must pay after the deductible and limit.",
+            f"- **Quota share** - the insurer and reinsurer share every loss by an agreed percentage (a 25% quota share: "
+            f"the reinsurer pays 25% of the gross loss). Here: {fin.QS_CESSION:.0%} unless you change it.",
+            f"- **Catastrophe excess of loss** - protects the insurer when one catastrophe's total loss gets large: the "
+            f"reinsurer pays above an agreed threshold, up to an agreed maximum. Here: KES {fin.XL_LIMIT_KES / 1e6:,.0f} m "
+            f"in excess of KES {fin.XL_RETENTION_KES / 1e6:,.0f} m per flood.",
+            "- **Net loss** - what stays with the insurer after its reinsurers pay."]))
     with st.expander("Policy and treaty terms (ASSUMED)", expanded=False):
         c = st.columns(3)
         ded_pct = c[0].slider("Deductible (% of insured value)", 0.0, 10.0, fin.DED_PCT * 100, 0.5) / 100
@@ -313,19 +389,18 @@ if page == 'Insurance & reinsurance':
                      "keeps each flood's loss up to the retention, the reinsurer pays the next 'limit'.")
     terms = dict(ded_pct=ded_pct, ded_min=ded_min, limit_pct=limit_pct, qs=qs, retention=ret, limit=lim)
     f_rps, lay, fsims, lm = run_financial(d_cur, tuple(terms.items()), tuple(tier_rp.items()), depth_scale, n_sims)
-    rng_ = lambda k, jj: f"range {kes(pct(fsims[k][:, jj], 5))}–{kes(pct(fsims[k][:, jj], 95))}"
     att = lambda r: "never (in modelled range)" if r is None else ("every modelled flood" if r == 0 else f"1-in-{r:.0f}")
 
-    k = st.columns(4)
-    k[0].metric("Insured loss, avg per year (AAL)", kes(lm["aal"]["gross"]))
-    k[0].caption(f"ground-up {kes(lm['aal']['ground_up'])}; policyholders keep {kes(lm['aal']['policyholder'])}")
-    k[1].metric(f"Insured 1-in-{f_rps[j100]} loss", kes(lay["gross"][j100]))
-    k[1].caption(rng_("gross", j100))
-    k[2].metric("Reinsurer expected loss / yr", kes(lm["aal"]["reinsurer"]))
-    k[2].caption(f"XL layer {kes(lm['xl_aal'])} · technical rate on line {lm['rate_on_line'] * 100:.1f}%"
-                 if lim > 0 else "no XL layer")
-    k[3].metric(f"Cedant net 1-in-{f_rps[j100]} loss", kes(lay["net"][j100]))
-    k[3].caption(f"layer starts paying: {att(lm['attach_rp'])} · used up: {att(lm['exhaust_rp'])}")
+    st.markdown(brand.kpis([
+        dict(label="Gross loss per year (AAL)", value=kes(lm["aal"]["gross"]),
+             sub=[f"ground-up {kes(lm['aal']['ground_up'])}", f"building owners keep {kes(lm['aal']['policyholder'])} (deductibles)"]),
+        dict(label=f"Gross 1-in-{f_rps[j100]} loss", value=kes(lay["gross"][j100]),
+             sub="range " + kes_range(pct(fsims["gross"][:, j100], 5), pct(fsims["gross"][:, j100], 95))),
+        dict(label="Reinsurer expected loss per year", value=kes(lm["aal"]["reinsurer"]), key=True,
+             sub=(f"XL layer {kes(lm['xl_aal'])} · technical rate on line {lm['rate_on_line'] * 100:.1f}%"
+                  if lim > 0 else "no XL layer")),
+        dict(label=f"Net 1-in-{f_rps[j100]} loss (insurer keeps)", value=kes(lay["net"][j100]),
+             sub=f"layer pays from {att(lm['attach_rp'])} · used up at {att(lm['exhaust_rp'])}")]), unsafe_allow_html=True)
 
     fe = go.Figure()
     for key, col, dash in [("ground_up", MUTED, "dot"), ("gross", INK, "solid"), ("reinsurer", ACCENT, "solid"),
@@ -345,7 +420,8 @@ if page == 'Insurance & reinsurance':
                          annotation_font=dict(size=11, color=MUTED))
     fe.update_xaxes(type="log", tickvals=f_rps, ticktext=[f"1-in-{r}" for r in f_rps], title="Return period (rarer →)",
                     showgrid=False)
-    fe.update_yaxes(title="Loss per flood (KES million)", gridcolor=GRID, rangemode="tozero")
+    fe.update_yaxes(title="Loss per flood (KES million)", gridcolor=GRID,
+                    range=[0, float(np.percentile(fsims["ground_up"], 95, axis=0).max()) / 1e6 * 1.08])
     fe.update_layout(template=brand.TEMPLATE, height=380, margin=dict(l=10, r=10, t=40, b=10), hovermode="x unified",
                      title=dict(text="Who carries the loss as floods get rarer (shaded: 5–95% range)", font=dict(size=15)),
                      legend=dict(orientation="h", y=-0.22, x=0, xanchor="left", yanchor="top"))
@@ -443,24 +519,30 @@ if page == 'Ask the assistant':
     if st.session_state.get("rag_key") != _sp_m:
         agent._index(raw); st.session_state.rag_key = _sp_m
     ctx = agent.Context(d=d_cur, d_base=d, hotspots=hs, tier_rp=tier_rp, mapping_name=mapping_name,
-                        depth_scale=depth_scale, sims=cur["sims"], sites=S_ if use_ai else None,
+                        depth_scale=depth_scale, sims=cur["sims_rp"], sites=S_ if use_ai else None,
                         bundle=B_ if use_ai else None, signals=raw, ai_label=src if use_ai else "off",
                         ai_kwargs=dict(mode=mode, w_max=w_max, sigma=sigma, w_ml=w_ml))
     st.session_state.setdefault("chat", [])
     AV_USER, AV_BOT = ":material/person:", ":material/water_drop:"
 
-    def _proof(turn):
+    def _answer(turn):
+        """The answer with numbered citations, then its sources and the steps taken."""
+        text, srcs = agent.cite(turn["a"], turn["trace"])
+        st.markdown(text, unsafe_allow_html=True)
         if turn["unverified"]:
             st.warning("Check before use - these numbers are not in the model's results: " + ", ".join(turn["unverified"]))
         if not turn["trace"]:
             return
-        with st.expander("How I got this" + (" · every number checked against the model ✓" if not turn["unverified"] else "")):
+        label = (f"{len(srcs)} source{'s' if len(srcs) != 1 else ''}" if srcs else "How I got this") +                 (" · every number checked against the model ✓" if not turn["unverified"] else "")
+        with st.expander(label):
+            for c in srcs:
+                st.markdown(f"<span class='kre-cite' style='vertical-align:0'>{c['n']}</span> &nbsp;**{c['title']}**"
+                            + (f" · {c['field']}" if c["field"] else ""), unsafe_allow_html=True)
+                st.caption(c["snippet"] if c["kind"] == "doc" else c["snippet"].split(": ", 1)[-1])
+            st.markdown("**Steps taken**")
             for t in turn["trace"]:
                 st.markdown(f"- {TOOL_WORDS.get(t['tool'], t['tool'])}")
-                if t["tool"] == "search_docs" and "passages" in t["result"]:
-                    for p_ in t["result"]["passages"][:3]:
-                        st.markdown(f"> *{p_['source']} - {p_['section']}*\n>\n> {p_['text'][:400]}")
-                elif tech:
+                if tech and t["tool"] != "search_docs":
                     st.caption(f"`{t['tool']}` `{json.dumps(t['args'])}`")
                     st.json(t["result"], expanded=1)
 
@@ -490,8 +572,7 @@ if page == 'Ask the assistant':
         with st.chat_message("user", avatar=AV_USER):
             st.markdown(turn["q"])
         with st.chat_message("assistant", avatar=AV_BOT):
-            st.markdown(turn["a"])
-            _proof(turn)
+            _answer(turn)
     typed = st.chat_input("Ask about flood risk, a location, a quote or a claim...", disabled=not llm.configured())
     question = clicked or typed
     if question:
@@ -518,6 +599,17 @@ if page == 'AI drainage evidence':
                     "badly, and a sentence quoted word for word. Quotes not found in the source are rejected. A fixed "
                     "formula, ΔS = w·exp(−d²/2σ²), raises the hazard near each place. The 24 county hotspots are never "
                     "used to place the uplift - only to score it, using the proxy map value at each hotspot.")
+        st.markdown("**Sources read** - every article in the source list, with a link to the original. Read them to check "
+                    "the evidence yourself.")
+        src_tbl = source_table(os.path.getmtime(os.path.join(HERE, "out", "signals_raw.json"))
+                               if os.path.exists(os.path.join(HERE, "out", "signals_raw.json")) else 0)
+        st.dataframe(src_tbl, hide_index=True, use_container_width=True,
+                     column_config={"original": st.column_config.LinkColumn("original", display_text="open ↗"),
+                                    "signals kept": st.column_config.NumberColumn(format="%d"),
+                                    "rejected": st.column_config.NumberColumn(format="%d")})
+        st.caption(f"{int((src_tbl.status == 'Used').sum())} of {len(src_tbl)} articles used. The list is fixed "
+                   "(data/sources.csv) and fetched once per run of run_ai.py - not on a schedule. Articles that copy the "
+                   "county hotspot list are skipped automatically so the hotspot test stays independent.")
         variants = []
         if have_sites:
             variants += [("Evidence sites, AI-weighted", sites, None, "ai"), ("Evidence sites, uniform (ablation)", sites, None, "uniform")]
@@ -587,15 +679,16 @@ if page == 'ML flood model':
                     f"reports by the LLM, against {b_['n_neg']} background locations. It predicts how flood-prone any "
                     f"location in Nairobi is - including places nobody has written about. The 24 county hotspots were "
                     f"never shown to it; they are the test.")
-        c = st.columns(4)
-        c[0].metric("Spatial cross-validation AUC", f"{b_['cv'][b_['model_name']]['roc_auc']:.2f}")
-        c[0].caption("0.5 = guessing, 1.0 = perfect; 3 km blocks held out")
-        c[1].metric("Held-out hotspot AUC", f"{ht['auc_ml']:.2f}", f"{ht['auc_ml'] - ht['auc_proxy']:+.2f} vs proxy alone")
-        c[1].caption("do county hotspots score above ordinary places?")
-        c[2].metric("Hotspots in city's top 10%", f"{ht['hotspots_in_top_10pct_ml']} / 24",
-                    f"{ht['hotspots_in_top_10pct_ml'] - ht['hotspots_in_top_10pct_proxy']:+d} vs proxy")
-        c[3].metric("Hotspots in city's top 20%", f"{ht['hotspots_in_top_20pct_ml']} / 24",
-                    f"{ht['hotspots_in_top_20pct_ml'] - ht['hotspots_in_top_20pct_proxy']:+d} vs proxy")
+        st.markdown(brand.kpis([
+            dict(label="Spatial cross-validation AUC", value=f"{b_['cv'][b_['model_name']]['roc_auc']:.2f}",
+                 sub="0.5 = guessing, 1.0 = perfect; 3 km blocks held out"),
+            dict(label="Held-out hotspot AUC", value=f"{ht['auc_ml']:.2f}", key=True,
+                 sub=f"{ht['auc_ml'] - ht['auc_proxy']:+.2f} vs the map alone ({ht['auc_proxy']:.2f})"),
+            dict(label="Hotspots in the city's top 10%", value=f"{ht['hotspots_in_top_10pct_ml']} / 24",
+                 sub=f"{ht['hotspots_in_top_10pct_ml'] - ht['hotspots_in_top_10pct_proxy']:+d} vs the map alone"),
+            dict(label="Hotspots in the city's top 20%", value=f"{ht['hotspots_in_top_20pct_ml']} / 24",
+                 sub=f"{ht['hotspots_in_top_20pct_ml'] - ht['hotspots_in_top_20pct_proxy']:+d} vs the map alone")]),
+            unsafe_allow_html=True)
         cvt = pd.DataFrame([{"model": k, "spatial-CV ROC AUC": v["roc_auc"], "spatial-CV PR AUC": v["pr_auc"],
                              "chance PR AUC": v["base_rate"]} for k, v in b_["cv"].items()])
         st.dataframe(cvt.style.format({"spatial-CV ROC AUC": "{:.2f}", "spatial-CV PR AUC": "{:.2f}",
@@ -672,17 +765,28 @@ if page == 'ML flood model':
 
 # ================================================================== 7. sensitivity & assumptions
 if page == 'Sensitivity & assumptions':
-    st.markdown("**Return-period mapping** - the single biggest assumption, not included in the shaded ranges.")
+    st.markdown("**Return-period mapping** - the single biggest assumption. It is inside the Monte Carlo ranges: each "
+                "run draws one mapping with the weight shown (ASSUMED). The central estimate uses the reference mapping.")
     srows = []
     for name, mp in cm.RP_MAPPINGS.items():
         det = cm.deterministic(d_cur, depth_scale=depth_scale, tier_rp=mp)
         p = det["loss"].sum(0)
         a_ = cm.aal_from_ep(det["rps"], p)
-        srows.append({"mapping": name, "technical premium (KES m)": a_ / 1e6, "rate ‰": a_ / tiv * 1000,
+        srows.append({"mapping": name, "weight in the ranges": cm.RP_WEIGHTS.get(name, 0),
+                      "technical premium (KES m)": a_ / 1e6, "rate ‰": a_ / tiv * 1000,
                       "1-in-100 loss (KES m)": cm.loss_at_rp(det["rps"], p, 100) / 1e6})
-    st.dataframe(pd.DataFrame(srows).style.format({"technical premium (KES m)": "{:,.1f}", "rate ‰": "{:.2f}",
-                                                   "1-in-100 loss (KES m)": "{:,.0f}"}),
+    st.dataframe(pd.DataFrame(srows).style.format({"weight in the ranges": "{:.0%}", "technical premium (KES m)": "{:,.1f}",
+                                                   "rate ‰": "{:.2f}", "1-in-100 loss (KES m)": "{:,.0f}"}),
                  hide_index=True, use_container_width=True)
+    rr = lambda a: f"{kes(pct(a, 5))} – {kes(pct(a, 95))}"
+    st.dataframe(pd.DataFrame([
+        {"range (5th–95th)": "AAL", "damage + depth only": rr(cur["aal_sims"]), "+ return-period mapping": rr(cur["aal_sims_rp"])},
+        {"range (5th–95th)": f"1-in-{rps[j100]} loss", "damage + depth only": rr(cur["sims"][:, j100]),
+         "+ return-period mapping": rr(cur["sims_rp"][:, j100])}]), hide_index=True, use_container_width=True)
+    st.caption(f"Weighted over the three mappings, the expected AAL is {kes(float(np.mean(cur['aal_sims_rp'])))} against "
+               f"{kes(cur['aal'])} for the reference mapping alone. Under the rarer mapping the 1-in-10 flood is not modelled "
+               "(counted as zero), and under the more frequent one nothing wider than its 1-in-100 flood exists, so losses "
+               "beyond it are held there: both are lower bounds, so the upper end of the 1-in-250 range is understated.")
     st.markdown("**Depth assumption**")
     ds = []
     for sc in (3.0, 4.0, 5.0):

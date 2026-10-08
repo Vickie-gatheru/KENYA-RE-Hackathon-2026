@@ -65,6 +65,8 @@ def portfolio_summary(ctx):
     if ctx.sims is not None:
         out["ranges_5_95pct"] = {f"1-in-{r}": f"{_kes(np.percentile(ctx.sims[:, k], 5))} to "
                                              f"{_kes(np.percentile(ctx.sims[:, k], 95))}" for k, r in enumerate(rps)}
+        out["ranges_include"] = ("damage spread, the depth rule, and which years each map tier represents (the biggest "
+                                 "assumption, weighted 50/25/25 across three mappings)")
     return out
 
 
@@ -324,6 +326,111 @@ def verify_numbers(answer, evidence):
         if not np.any(np.abs(allowed - x) <= np.maximum(0.01 * np.abs(allowed), 0.051)):
             bad.append(f"{x:g}")
     return sorted(set(bad))
+
+
+# ------------------------------------------------------------------ citations (NotebookLM-style)
+# Placed deterministically, not by the LLM: every number in the answer is traced to the tool result or document
+# passage that holds it (same 1% rule as verify_numbers); a sentence with no number is matched to the retrieved
+# passage it shares most words with. Each source gets a number; the marker sits at the end of its sentence.
+TOOL_LABELS = {"evaluate_site": "Site evaluation", "portfolio_summary": "Portfolio results",
+               "breakdown": "Loss breakdown", "price_risk": "Risk pricing", "explain_location": "Location explanation",
+               "what_if": "What-if run", "hotspot_check": "County flood list check", "search_docs": "Model documentation"}
+_NUM = re.compile(r"\d[\d,]*\.?\d*")
+_STOP = set("the a an and or of to in on for is are was were be by with that this it as at from which their its "
+            "than then there these those has have had not but can will would should may also about into more most".split())
+
+
+def _nums(t):
+    return [float(x.replace(",", "")) for x in _NUM.findall(str(t)) if x.replace(",", "").replace(".", "").isdigit()]
+
+
+def _leaves(obj, path=""):
+    if isinstance(obj, dict):
+        for k, v in obj.items():
+            yield from _leaves(v, f"{path} › {k}" if path else str(k))
+    elif isinstance(obj, (list, tuple)):
+        for i, v in enumerate(obj):
+            yield from _leaves(v, f"{path} [{i + 1}]")
+    else:
+        yield path or "value", obj
+
+
+def _evidence_items(trace):
+    items = []
+    for t in trace:
+        res = t.get("result", {})
+        if t["tool"] == "search_docs" and isinstance(res, dict) and "passages" in res:
+            for p in res["passages"]:
+                items.append(dict(kind="doc", title=f"{p['source']} · {p['section']}", text=p["text"], nums=_nums(p["text"])))
+        else:
+            for path, val in _leaves(res):
+                path = path.replace("_", " ")
+                items.append(dict(kind="tool", title=TOOL_LABELS.get(t["tool"], t["tool"]), field=path,
+                                  text=f"{path}: {val}", nums=_nums(val)))
+    return items
+
+
+def _words(t):
+    return {w for w in re.findall(r"[a-z]{4,}", str(t).lower()) if w not in _STOP}
+
+
+def _snippet(item, x=None, width=170):
+    if item["kind"] == "tool":
+        return item["text"]
+    txt = item["text"]
+    if x is not None:
+        for m in _NUM.finditer(txt):
+            v = _nums(m.group())
+            if v and abs(v[0] - x) <= max(0.01 * abs(v[0]), 0.051):
+                a, b = max(0, m.start() - width), min(len(txt), m.end() + width)
+                return ("…" if a else "") + txt[a:b].strip() + ("…" if b < len(txt) else "")
+    return txt[:2 * width].strip() + ("…" if len(txt) > 2 * width else "")
+
+
+def cite(answer, trace):
+    """Returns (answer with citation markers as HTML, sources list). Markers: <span class='kre-cite'>n<span
+    class='kre-pop'>source</span></span>, shown on hover/click by the page's CSS."""
+    import html as _h
+    items = _evidence_items(trace)
+    sources, key_to_n = [], {}
+
+    def ref(i, x=None):
+        it = items[i]
+        key = (it["title"], it.get("field", it["text"][:40]))
+        if key not in key_to_n:
+            key_to_n[key] = len(sources) + 1
+            sources.append(dict(n=key_to_n[key], kind=it["kind"], title=it["title"], field=it.get("field", ""),
+                                snippet=_snippet(it, x)))
+        return key_to_n[key]
+
+    out_lines = []
+    for line in str(answer).split("\n"):
+        parts = re.split(r"(?<=[.!?;])\s+", line)
+        done = []
+        for sent in parts:
+            ids = []
+            # "1-in-100" names a flood size; its number is a label, not a figure to source
+            for x in _nums(re.sub(r"1-in-[\d,]+", " ", sent)):
+                if x <= 5 and float(x).is_integer():
+                    continue
+                hit = next((i for i, it in enumerate(items)
+                            if any(abs(v - x) <= max(0.01 * abs(v), 0.051) for v in it["nums"])), None)
+                if hit is not None and (n := ref(hit, x)) not in ids:
+                    ids.append(n)
+            if not ids and len(_words(sent)) >= 4:
+                docs = [(len(_words(sent) & _words(it["text"])), i) for i, it in enumerate(items) if it["kind"] == "doc"]
+                best = max(docs, default=(0, None))
+                if best[1] is not None and best[0] >= 3 and best[0] >= 0.3 * len(_words(sent)):
+                    ids.append(ref(best[1]))
+            if ids:
+                marks = "".join(
+                    f"<span class='kre-cite' tabindex='0'>{n}<span class='kre-pop'><b>{_h.escape(sources[n - 1]['title'])}"
+                    f"</b>{_h.escape(sources[n - 1]['snippet'])}</span></span>" for n in ids)
+                m = re.search(r"([.!?;:]*)\s*$", sent)
+                sent = sent[:m.start()] + marks + sent[m.start():]
+            done.append(sent)
+        out_lines.append(" ".join(done))
+    return "\n".join(out_lines), sources
 
 
 def run(ctx, question, history, call):

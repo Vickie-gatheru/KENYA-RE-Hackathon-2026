@@ -133,6 +133,7 @@ The evidence layer only raises hazard where a report names a place. The ML model
 | Grading on the data we tuned on | Uplift placed only from report text. The 24 hotspot coordinates are used only for scoring. |
 | LLM reads the answer key | Sources naming ≥10 of the 24 hotspots are auto-excluded (the county list itself). |
 | LLM invents evidence | Each signal must quote its source verbatim. Paraphrases and invented places are rejected and logged. |
+| LLM mistakes a forecast for evidence | A quote that looks ahead (alert, forecast, warning) and reports no flooding that happened is rejected (`extract.is_forecast_only`); the prompt also forbids forecasts. |
 | Gaming recall by uplifting everywhere | Uplift footprint (% of buildings and value affected) is reported next to recall. |
 | LLM adds nothing | Ablation: same sites with uniform weight. If results match, the grading added nothing. |
 | Double-counting river flooding | `river_overflow` signals are excluded, since the proxy already captures them. |
@@ -142,21 +143,26 @@ The evidence layer only raises hazard where a report names a place. The ML model
 
 ### Results of the first real run (7 Oct 2026; 16 sources fetched, `openai/gpt-oss-120b` on Groq)
 
-- 96 quote-verified signals kept, 9 rejected (8 quote not verbatim, 1 place name); 88 geocoded; 41 evidence sites
-  (river_overflow excluded). 39 signals have mechanism "unknown" and are uplifted (judgement call).
+- 84 signals kept, 21 rejected (8 quote not verbatim, 1 place name, **12 forecast or warning**); 76 geocoded; 36
+  evidence sites (river_overflow excluded). 39 signals have mechanism "unknown" and are uplifted (judgement call).
+- **Forecast filter (added after review):** the first pass kept 10 signals from one sentence - "Weather alerts had
+  indicated widespread heavy rain across ... Mathare" - which the LLM had labelled drainage blockage. It was copied
+  word for word, so the verbatim check passed, but it is a forecast, not a flood report. `extract.validate` now rejects
+  quotes that look ahead (alert, forecast, warning, expected to, ...) and report no flooding that happened;
+  "flood-prone" statements are kept. Re-run from the cached LLM replies (no new calls).
 - The 24-hotspot list article (`star_dam_evacuation`) was auto-skipped. The police warning article
   (`kenyans_nps_warning`, 6 of 24 hotspots) contributed only river_overflow signals, so it has no effect on uplift.
-- **Hotspot recall:** proxy 12/24 → evidence layer 19/24; uniform-weight ablation 20/24 (**the LLM's severity and
-  confidence weighting adds nothing to recall** - the value is in *which* places it finds). Footprint: 7.5% of
-  the city map, 25% of buildings.
-- **Placebo:** random city points average 13.1/24 (p < 0.002); **random portfolio buildings average 15.5/24,
-  p ≈ 0.05 - better than chance, but only borderline** against the fair baseline.
-- **ML:** logistic regression, 56 places, spatial-CV AUC 0.93; held-out hotspot AUC 0.90 vs proxy 0.54. But
+- **Hotspot recall:** proxy 12/24 → evidence layer 19/24 (unchanged by the filter: the forecast signals detected
+  nothing); uniform-weight ablation 20/24 (**the LLM's severity and confidence weighting adds nothing to recall** - the
+  value is in *which* places it finds). Footprint: 6.7% of the city map, 22% of buildings (was 7.5% / 25%).
+- **Placebo:** random city points average 13.1/24 (p < 0.002); random portfolio buildings average 15.2/24,
+  **p = 0.03** (was 0.048 with the forecast signals) - better than chance against the fair baseline, by a modest margin.
+- **ML:** logistic regression, 51 places, spatial-CV AUC 0.95; held-out hotspot AUC 0.91 vs proxy 0.54. But
   **road density alone scores 0.89**. On the built-up half of the city: ML 0.83, road density 0.79, proxy 0.53 - a
-  modest real gain. Buffer test: AUC stays 0.90 with training places within 2 km of a hotspot removed (22 left),
+  modest real gain. Buffer test: AUC 0.92 with training places within 2 km of a hotspot removed (18 left),
   so the result is not driven by news naming the same places. The OSM informal-settlement layer has only 14
   polygons for Nairobi; the feature is almost always 0 (AUC alone 0.50, zero SHAP weight) and changes nothing.
-- Portfolio with evidence uplift: 1-in-100 KES 327 m → 446 m; AAL KES 13.8 m → 19.9 m.
+- Portfolio with evidence uplift: 1-in-100 KES 327 m → 425 m; AAL KES 13.8 m → 19.3 m.
 
 ## Financial engine: insured and reinsured loss (`financial.py`, "Insurance & reinsurance" page)
 
@@ -178,7 +184,7 @@ exhausted ≈1-in-107; layer expected loss KES 6.4 m/yr, technical rate on line 
 
 | Assumption | Value | Basis | Tested by |
 |---|---|---|---|
-| Tier → return period | extreme 10, severe 25, moderate 50, occasional 100, common 250 y | Organisers' reference dashboard; widest map = rarest event (metadata) | 3 alternative mappings |
+| Tier → return period | extreme 10, severe 25, moderate 50, occasional 100, common 250 y | Organisers' reference dashboard; widest map = rarest event (metadata) | 3 mappings, weighted 50/25/25 inside the Monte Carlo |
 | Score → depth | depth = score × 4 m | Brief's example | Monte Carlo, 3–5 m |
 | Base vulnerability | JRC Africa residential mean damage by depth (0–6 m) | PUBLISHED: Huizinga et al. 2017, JRC105688 | — |
 | Per-type adjustment | damage = cap × JRC(depth × factor): informal ×1.6/95%, semi-permanent ×1.3/90%, masonry ×1.0/85%, RCC ×0.75/80% | ASSUMED: fragile types behave as if water were deeper; caps per brief (80–95%) | — |
@@ -193,8 +199,15 @@ exhausted ≈1-in-107; layer expected loss KES 6.4 m/yr, technical rate on line 
 ## Uncertainty (taxonomy from the Oasis LMF introduction, p. 8)
 
 - **Model:** vulnerability curves, depth scale, tier → return period mapping. The mapping is the largest
-  single driver: AAL ranges from KES 6.1m to 29.3m across the three mappings tested, a wider range
-  than the Monte Carlo produces.
+  single driver: AAL is KES 6.1 m, 13.8 m or 29.3 m under the three mappings tested.
+- **In the ranges (`catmodel.with_rp_uncertainty`):** the mapping does not change any tier's loss, only how often
+  it happens, so each Monte Carlo run also draws one mapping (ASSUMED weights: reference 50%, more frequent 25%,
+  rarer 25%) and keeps its damage and depth draws. Each run's AAL uses its own mapping; its loss curve is re-read at
+  the reference return periods (log-interpolated; 0 below the mapping's most frequent event, held at its rarest beyond
+  it - lower bounds, so the top of the 1-in-250 range is understated). The central estimate stays on the reference
+  mapping. Map only, 2,000 runs: **AAL range KES 5.2-33.3 m** (damage + depth alone: 10.2-17.6 m), mean 15.5 m vs 13.8 m
+  central; **1-in-100 range KES 170-570 m** (alone: 249-408 m). Used in the dashboard, `summary.json`
+  (`baseline.incl_return_period_uncertainty`), the saved EP chart and the assistant.
 - **Data:** synthetic exposure; approximate hotspot and place coordinates (area centres).
 - **Unmodelled:** contents, business interruption, rainfall intensity, drainage network geometry,
   flooding not reported in our text sources.

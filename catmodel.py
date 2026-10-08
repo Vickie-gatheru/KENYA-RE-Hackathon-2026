@@ -175,9 +175,55 @@ def loss_at_rp(rps, port_loss, target):
     return float(np.interp(np.log(target), np.log(rps), port_loss))
 
 
-# ASSUMED alternatives for the tier -> return period mapping, used only for sensitivity testing.
+# ASSUMED alternatives for the tier -> return period mapping: a sensitivity test, and (with RP_WEIGHTS) a source of
+# uncertainty inside the Monte Carlo ranges.
 RP_MAPPINGS = {
     "reference (10-250y)":  {"extreme": 10, "severe": 25, "moderate": 50, "occasional": 100, "common": 250},
     "more frequent (5-100y)": {"extreme": 5, "severe": 10, "moderate": 25, "occasional": 50, "common": 100},
     "rarer (25-500y)":      {"extreme": 25, "severe": 50, "moderate": 100, "occasional": 250, "common": 500},
 }
+# ASSUMED: how plausible each mapping is. The reference follows the organisers' dashboard; the two alternatives are
+# equally likely departures either way. This is the biggest single assumption, so the ranges must carry it.
+RP_WEIGHTS = {"reference (10-250y)": 0.5, "more frequent (5-100y)": 0.25, "rarer (25-500y)": 0.25}
+
+
+def with_rp_uncertainty(sims, tier_rp=None, weights=None, seed=7):
+    """Fold the tier -> return-period assumption into Monte Carlo results.
+
+    The mapping never changes a tier's loss - only how often that flood happens - so each simulation draws one mapping
+    (by `weights`) and keeps its losses. sims: (n_sims, n_events), events ordered as `tier_rp` orders them.
+    Returns (ep, aal, pick):
+      ep   (n_sims, n_events) each simulation's loss read at tier_rp's return periods, log-interpolated in return
+           period. Below a mapping's most frequent event the loss is 0, beyond its rarest it is held at the rarest
+           event's loss - both lower bounds, the same convention as aal_from_ep.
+      aal  (n_sims,) each simulation's AAL under its own mapping (exact, no interpolation).
+      pick (n_sims,) index into list(weights) of the mapping each simulation used."""
+    sims = np.asarray(sims, float)
+    tier_rp = tier_rp or TIER_RP
+    weights = weights or RP_WEIGHTS
+    tiers = sorted(TIERS, key=lambda t: tier_rp[t])
+    ref = np.array([tier_rp[t] for t in tiers], float)
+    names = list(weights)
+    p = np.array([weights[n] for n in names], float)
+    pick = np.random.default_rng(seed).choice(len(names), size=len(sims), p=p / p.sum())
+    ep, aal = np.zeros_like(sims), np.zeros(len(sims))
+    for k, name in enumerate(names):
+        rows = pick == k
+        if not rows.any():
+            continue
+        rps_m = np.array([RP_MAPPINGS[name][t] for t in tiers], float)
+        assert np.all(np.diff(rps_m) > 0), f"mapping {name} must keep the tiers' order"
+        s = sims[rows]
+        aal[rows] = aal_from_ep(rps_m, s)
+        out = np.zeros_like(s)
+        for j, r in enumerate(ref):
+            if r < rps_m[0]:
+                continue                                   # more frequent than this mapping models: 0 (lower bound)
+            if r >= rps_m[-1]:
+                out[:, j] = s[:, -1]                       # rarer than modelled: held at the rarest loss (lower bound)
+                continue
+            i = int(np.searchsorted(rps_m, r, side="right")) - 1
+            f = (np.log(r) - np.log(rps_m[i])) / (np.log(rps_m[i + 1]) - np.log(rps_m[i]))
+            out[:, j] = s[:, i] + (s[:, i + 1] - s[:, i]) * f
+        ep[rows] = out
+    return ep, aal, pick

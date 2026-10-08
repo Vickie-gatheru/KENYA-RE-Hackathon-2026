@@ -60,7 +60,8 @@ FLOOD-PRONE. For each place return:
 - confidence: 0-1, how clearly the text ties flooding to THIS specific place.
 
 Rules: only use what the text says; do not add places from general knowledge; skip places outside
-Nairobi. If nothing qualifies, return an empty list.
+Nairobi. Do NOT use weather forecasts, alerts, warnings or advisories about rain or flooding that may happen:
+only text saying a place flooded, or describing it as flood-prone. If nothing qualifies, return an empty list.
 
 Respond with JSON only, in this shape: {{"signals": [ ... ]}}
 
@@ -99,14 +100,34 @@ def call_llm(prompt):
 
 
 # ------------------------------------------------------------------ validation
+# A quote can be copied word for word and still not be evidence: "Weather alerts had indicated heavy rain across
+# ... Mathare" passed the verbatim check in the first real run. A quote that is forward-looking (a forecast, alert,
+# warning or prediction) and reports no actual flooding is rejected. "Flood-prone" statements are kept: the prompt
+# asks for them, and they describe the place, not a prediction.
+FORECAST = re.compile(r"\b(alerts?|forecasts?|forecasted|warn(?:s|ed|ing|ings)?|advis(?:ory|ories|ed)|expected to|"
+                      r"likely to|predict(?:s|ed|ion)?|could (?:experience|flood|be flooded)|"
+                      r"may (?:experience|flood|be flooded)|will (?:experience|flood))\b", re.I)
+ACTUAL = re.compile(r"\b(flooded|flooding (?:hit|left|swept|submerged|trapped|displaced)|"
+                    r"floods? (?:hit|swept|submerged|left|killed|displaced|destroyed|ravaged)|submerged|swept|"
+                    r"marooned|inundated|overflow(?:ed|ing)|burst|waterlogged|stranded|trapped|displaced|killed|died|"
+                    r"dead|deaths?|destroyed|damaged|poured|under water|washed away|rescued|evacuated|cut off|"
+                    r"impassable)\b", re.I)
+
+
+def is_forecast_only(quote):
+    """True if the quote looks ahead (forecast / alert / warning) and reports no flooding that happened."""
+    return bool(FORECAST.search(quote)) and not ACTUAL.search(quote)
+
+
 def _norm(s):
     s = s.replace("’", "'").replace("‘", "'").replace("“", '"').replace("”", '"')
     return re.sub(r"\s+", " ", s).strip().lower()
 
 
 def validate(signals, source):
-    """Keep only well-formed signals whose evidence_quote appears verbatim in the source.
-    Returns (kept, rejected-with-reason). This is the main guard against the LLM inventing evidence."""
+    """Keep only well-formed signals whose evidence_quote appears verbatim in the source AND reports flooding
+    (not a forecast or warning). Returns (kept, rejected-with-reason). This is the main guard against the LLM
+    inventing evidence or mistaking a forecast for a flood report."""
     kept, rejected = [], []
     body = _norm(source["text"])
     for s in signals:
@@ -124,8 +145,10 @@ def validate(signals, source):
             reason = "evidence_quote not found verbatim in source"
         elif _norm(s["place_name"]) not in body:
             reason = "place_name not in source"
+        elif is_forecast_only(s["evidence_quote"]):
+            reason = "forecast or warning, not a report of flooding"
         if reason:
-            rejected.append({**s, "reject_reason": reason})
+            rejected.append({**s, "reject_reason": reason, "source_id": source["source_id"]})
         else:
             kept.append({**s, "source_id": source["source_id"], "source_title": source["title"],
                          "source_url": source["url"], "source_date": source["date"]})

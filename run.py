@@ -31,7 +31,12 @@ def analyse(d, sims=a.sims):
     port = det["loss"].sum(0)
     _, mc = cm.simulate(d, n_sims=sims, vary_depth_scale=True)
     s = cm.summarise(det["rps"], mc)
-    return dict(rps=det["rps"], det=det, port=port, aal=float(cm.aal_from_ep(det["rps"], port)), mc=s)
+    ep_rp, aal_rp, _ = cm.with_rp_uncertainty(mc)          # + the tier -> return-period assumption (RP_WEIGHTS)
+    q = np.percentile(ep_rp, [5, 95], axis=0)
+    s_rp = dict(p5=dict(zip(det["rps"].tolist(), q[0].tolist())), p95=dict(zip(det["rps"].tolist(), q[1].tolist())),
+                aal_p5=float(np.percentile(aal_rp, 5)), aal_p95=float(np.percentile(aal_rp, 95)),
+                aal_mean=float(aal_rp.mean()))
+    return dict(rps=det["rps"], det=det, port=port, aal=float(cm.aal_from_ep(det["rps"], port)), mc=s, mc_rp=s_rp)
 
 
 def fmt(x):
@@ -46,15 +51,23 @@ base = analyse(d)
 rps = base["rps"]
 summary = dict(label=a.label or "MAIN RUN",
                tags="exposure SYNTHETIC | hazard PROXY | vulnerability, depth scale, return periods ASSUMED | "
-                    "losses are GROUND-UP (before deductibles/limits)",
+                    "losses GROUND-UP unless in 'financial' (ASSUMED policy and treaty terms)",
                total_tiv_kes=float(d.tiv_kes.sum()), n_buildings=len(d))
 summary["baseline"] = dict(loss_kes_m={int(r): fmt(v) for r, v in zip(rps, base["port"])},
                            p5_kes_m={int(r): fmt(v) for r, v in base["mc"]["p5"].items()},
                            p95_kes_m={int(r): fmt(v) for r, v in base["mc"]["p95"].items()},
                            aal_kes_m=fmt(base["aal"]),
-                           aal_range_kes_m=[fmt(base["mc"]["aal_p5"]), fmt(base["mc"]["aal_p95"])])
+                           aal_range_kes_m=[fmt(base["mc"]["aal_p5"]), fmt(base["mc"]["aal_p95"])],
+                           incl_return_period_uncertainty=dict(
+                               weights_ASSUMED=cm.RP_WEIGHTS,
+                               p5_kes_m={int(r): fmt(v) for r, v in base["mc_rp"]["p5"].items()},
+                               p95_kes_m={int(r): fmt(v) for r, v in base["mc_rp"]["p95"].items()},
+                               aal_range_kes_m=[fmt(base["mc_rp"]["aal_p5"]), fmt(base["mc_rp"]["aal_p95"])],
+                               aal_mean_kes_m=fmt(base["mc_rp"]["aal_mean"]),
+                               note="central estimate = reference mapping; ranges draw one mapping per run. Below a "
+                                    "mapping's most frequent event loss = 0, beyond its rarest it is held (lower bounds)"))
 
-# ---- return-period mapping sensitivity (the biggest single assumption the Monte Carlo doesn't vary)
+# ---- return-period mapping sensitivity (the biggest single assumption; also folded into the ranges above)
 rp_sens = []
 for name, mapping in cm.RP_MAPPINGS.items():
     det = cm.deterministic(d, tier_rp=mapping)
@@ -155,8 +168,8 @@ S1, S2 = brand.BLUE, brand.CRIMSON
 fig, ax = plt.subplots(figsize=(7.4, 4.6))
 series = [("Baseline proxy", base, S1)] + ([("With AI drainage layer", res_ai, S2)] if have_signals else [])
 for name, r, c in series:
-    lo = np.array([r["mc"]["p5"][x] for x in rps]) / 1e6
-    hi = np.array([r["mc"]["p95"][x] for x in rps]) / 1e6
+    lo = np.array([r["mc_rp"]["p5"][x] for x in rps]) / 1e6
+    hi = np.array([r["mc_rp"]["p95"][x] for x in rps]) / 1e6
     ax.fill_between(rps, lo, hi, color=c, alpha=0.12, linewidth=0)
     ax.plot(rps, r["port"] / 1e6, color=c, lw=2, marker="o", ms=8, mec="white", mew=2, label=name)
     ax.annotate(f"{r['port'][-1] / 1e6:,.0f}", (rps[-1], r["port"][-1] / 1e6), textcoords="offset points",
@@ -170,7 +183,7 @@ for s in ("left", "bottom"): ax.spines[s].set_color(GRID)
 ax.grid(axis="y", color=GRID)
 if len(series) > 1:
     ax.legend(frameon=False, loc="upper left", fontsize=8, labelcolor=MUTED)
-title = "Nairobi flood loss by return period - shaded: 5-95% range"
+title = "Nairobi flood loss by return period - shaded: 5-95% range incl. return-period assumption"
 ax.set_title(title + (f"   [{a.label}]" if a.label else ""), fontsize=10, color=INK, loc="left")
 fig.text(0.01, 0.01, "Synthetic exposure | proxy hazard | assumed vulnerability", fontsize=7, color=MUTED)
 fig.tight_layout(rect=(0, 0.03, 1, 1)); fig.savefig(f"{a.out}/ep_curve.png", dpi=150)

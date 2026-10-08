@@ -170,136 +170,6 @@
       "source_date": " "
     },
     {
-      "place_name": "Westlands",
-      "place_type": "neighbourhood",
-      "mechanism": "drainage_blockage",
-      "severity": 1,
-      "event_date": "2026-03",
-      "evidence_quote": "Weather alerts had indicated widespread heavy rain across areas including Westlands, Dagoretti, Roysambu, Kibra, Embakasi, Makadara, Kamukunji, Langata, Kasarani and Mathare, with localized downpours expected to exceed 70 millimetres in some locations.",
-      "confidence": 0.9,
-      "source_id": "capital_failing_drainage_2026",
-      "source_title": "Nairobi's failing drainage exposed again as flooded roads trap hundreds",
-      "source_url": "https://capitalfm.africa/nairobi-floods-cars-stranded-kdf-rescue-drainage-failure/",
-      "source_date": " "
-    },
-    {
-      "place_name": "Dagoretti",
-      "place_type": "neighbourhood",
-      "mechanism": "drainage_blockage",
-      "severity": 1,
-      "event_date": "2026-03",
-      "evidence_quote": "Weather alerts had indicated widespread heavy rain across areas including Westlands, Dagoretti, Roysambu, Kibra, Embakasi, Makadara, Kamukunji, Langata, Kasarani and Mathare, with localized downpours expected to exceed 70 millimetres in some locations.",
-      "confidence": 0.9,
-      "source_id": "capital_failing_drainage_2026",
-      "source_title": "Nairobi's failing drainage exposed again as flooded roads trap hundreds",
-      "source_url": "https://capitalfm.africa/nairobi-floods-cars-stranded-kdf-rescue-drainage-failure/",
-      "source_date": " "
-    },
-    {
-      "place_name": "Roysambu",
-      "place_type": "neighbourhood",
-      "mechanism": "drainage_blockage",
-      "severity": 1,
-      "event_date": "2026-03",
-      "evidence_quote": "Weather alerts had indicated widespread heavy rain across areas including Westlands, Dagoretti, Roysambu, Kibra, Embakasi, Makadara, Kamukunji, Langata, Kasarani and Mathare, with localized downpours expected to exceed 70 millimetres in some locations.",
-      "confidence": 0.9,
-      "source_id": "capital_failing_drainage_2026",
-      "source_title": "Nairobi's failing drainage exposed again as flooded roads trap hundreds",
-      "source_url": "https://capitalfm.africa/nairobi-floods-cars-stranded-kdf-rescue-drainage-failure/",
-      "source_date": " "
-    },
-    {
-      "place_name": "Kibra",
-      "place_type": "neighbourhood",
-      "mechanism": "drainage_blockage",
-      "severity": 1,
-      "event_date": "2026-03",
-      "evidence_quote": "Weather alerts had indicated widespread heavy rain across areas including Westlands, Dagoretti, Roysambu, Kibra, Embakasi, Makadara, Kamukunji, Langata, Kasarani and Mathare, with localized downpours expected to exceed 70 millimetres in some locations.",
-      "confidence": 0.9,
-      "source_id": "capital_failing_drainage_2026",
-      "source_title": "Nairobi's failing drainage exposed again as flooded roads trap hundreds",
-      "source_url": "https://capitalfm.africa/nairobi-floods-cars-stranded-kdf-rescue-drainage-failure/",
-      "source_date": " "
-    },
-    {
-      "place_name": "Embakasi",
-      "place_type": "neighbourhood",
-      "mechanism": "drainage_blockage",
-      "severity": 1,
-      "event_date": "2026-03",
-      "evidence_quote": "Weather alerts had indicated widespread heavy rain across areas including Westlands, Dagoretti, Roysambu, Kibra, Embakasi, Makadara, Kamukunji, Langata, Kasarani and Mathare, with localized downpours expected to exceed 70 millimetres in some locations.",
-      "confidence": 0.9,
-      "source_id": "capital_failing_drainage_2026",
-      "source_title": "Nairobi's failing drainage exposed again as flooded roads trap hundreds",
-      "source_url": "https://capitalfm.africa/nairobi-floods-cars-stranded-kdf-rescue-drainage-failure/",
-      "source_date": " "
-    },
-    {
-      "place_name": "Makadara",
-      "place_type": "neighbourhood",
-      "mechanism": "drainage_blockage",
-      "severity": 1,
-      "event_date": "2026-03",
-      "evidence_quote": "Weather alerts had indicated widespread heavy rain across areas including Westlands, Dagoretti, Roysambu, Kibra, Embakasi, Makadara, Kamukunji, Langata, Kasarani and Mathare, with localized downpours expected to exceed 70 millimetres in some locations.",
-      "confidence": 0.9,
-      "source_id": "capital_failing_drainage_2026",
-      "source_title": "Nairobi's failing drainage exposed again as flooded roads trap hundreds",
-      "source_url": "https://capitalfm.africa/nairobi-floods-cars-stranded-kdf-rescue-drainage-failure/",
-      "source_date": " "
-    },
-    {
-      "place_name": "Kamukunji",
-      "place_type": "neighbourhood",
-      "mechanism": "drainage_blockage",
-      "severity": 1,
-      "event_date": "2026-03",
-      "evidence_quote": "Weather alerts had indicated widespread heavy rain across areas including Westlands, Dagoretti, Roysambu, Kibra, Embakasi, Makadara, Kamukunji, Langata, Kasarani and Mathare, with localized downpours expected to exceed 70 millimetres in some locations.",
-      "confidence": 0.9,
-      "source_id": "capital_failing_drainage_2026",
-      "source_title": "Nairobi's failing drainage exposed again as flooded roads trap hundreds",
-      "source_url": "https://capitalfm.africa/nairobi-floods-cars-stranded-kdf-rescue-drainage-failure/",
-      "source_date": " "
-    },
-    {
-      "place_name": "Langata",
-      "place_type": "neighbourhood",
-      "mechanism": "drainage_blockage",
-      "severity": 1,
-      "event_date": "2026-03",
-      "evidence_quote": "Weather alerts had indicated widespread heavy rain across areas including Westlands, Dagoretti, Roysambu, Kibra, Embakasi, Makadara, Kamukunji, Langata, Kasarani and Mathare, with localized downpours expected to exceed 70 millimetres in some locations.",
-      "confidence": 0.9,
-      "source_id": "capital_failing_drainage_2026",
-      "source_title": "Nairobi's failing drainage exposed again as flooded roads trap hundreds",
-      "source_url": "https://capitalfm.africa/nairobi-floods-cars-stranded-kdf-rescue-drainage-failure/",
-      "source_date": " "
-    },
-    {
-      "place_name": "Kasarani",
-      "place_type": "neighbourhood",
-      "mechanism": "drainage_blockage",
-      "severity": 1,
-      "event_date": "2026-03",
-      "evidence_quote": "Weather alerts had indicated widespread heavy rain across areas including Westlands, Dagoretti, Roysambu, Kibra, Embakasi, Makadara, Kamukunji, Langata, Kasarani and Mathare, with localized downpours expected to exceed 70 millimetres in some locations.",
-      "confidence": 0.9,
-      "source_id": "capital_failing_drainage_2026",
-      "source_title": "Nairobi's failing drainage exposed again as flooded roads trap hundreds",
-      "source_url": "https://capitalfm.africa/nairobi-floods-cars-stranded-kdf-rescue-drainage-failure/",
-      "source_date": " "
-    },
-    {
-      "place_name": "Mathare",
-      "place_type": "neighbourhood",
-      "mechanism": "drainage_blockage",
-      "severity": 1,
-      "event_date": "2026-03",
-      "evidence_quote": "Weather alerts had indicated widespread heavy rain across areas including Westlands, Dagoretti, Roysambu, Kibra, Embakasi, Makadara, Kamukunji, Langata, Kasarani and Mathare, with localized downpours expected to exceed 70 millimetres in some locations.",
-      "confidence": 0.9,
-      "source_id": "capital_failing_drainage_2026",
-      "source_title": "Nairobi's failing drainage exposed again as flooded roads trap hundreds",
-      "source_url": "https://capitalfm.africa/nairobi-floods-cars-stranded-kdf-rescue-drainage-failure/",
-      "source_date": " "
-    },
-    {
       "place_name": "Nairobi West",
       "place_type": "neighbourhood",
       "mechanism": "inadequate_drainage_capacity",
@@ -605,32 +475,6 @@
       "severity": 1,
       "event_date": "2024-04",
       "evidence_quote": "Flood risks are also high in southern areas of the city, such as Kibera and South C, which lie along the Ngong River.",
-      "confidence": 0.9,
-      "source_id": "kenyans_nps_warning",
-      "source_title": "NPS warns of flooding in Kileleshwa Ngara Kibra Kasarani and 7 other estates",
-      "source_url": "https://www.kenyans.co.ke/news/122991-nps-warns-flooding-kileleshwa-ngara-kibra-kasarani-7-other-nairobi-estates",
-      "source_date": " "
-    },
-    {
-      "place_name": "Kasarani",
-      "place_type": "neighbourhood",
-      "mechanism": "river_overflow",
-      "severity": 1,
-      "event_date": "2024-04",
-      "evidence_quote": "Additionally, rising water levels in both the Kamiti and Athi rivers are expected to affect the Kasarani area, while Mathare would also be affected by its eponymous river.",
-      "confidence": 0.9,
-      "source_id": "kenyans_nps_warning",
-      "source_title": "NPS warns of flooding in Kileleshwa Ngara Kibra Kasarani and 7 other estates",
-      "source_url": "https://www.kenyans.co.ke/news/122991-nps-warns-flooding-kileleshwa-ngara-kibra-kasarani-7-other-nairobi-estates",
-      "source_date": " "
-    },
-    {
-      "place_name": "Mathare",
-      "place_type": "neighbourhood",
-      "mechanism": "river_overflow",
-      "severity": 1,
-      "event_date": "2024-04",
-      "evidence_quote": "Additionally, rising water levels in both the Kamiti and Athi rivers are expected to affect the Kasarani area, while Mathare would also be affected by its eponymous river.",
       "confidence": 0.9,
       "source_id": "kenyans_nps_warning",
       "source_title": "NPS warns of flooding in Kileleshwa Ngara Kibra Kasarani and 7 other estates",
@@ -1258,7 +1102,8 @@
       "event_date": "2026-03",
       "evidence_quote": "The flooding also damaged key water supply pipelines ... affecting at least 15 estates including Dandora, Buruburu, Mathare, and parts of Eastleigh.",
       "confidence": 0.85,
-      "reject_reason": "evidence_quote not found verbatim in source"
+      "reject_reason": "evidence_quote not found verbatim in source",
+      "source_id": "asm_planning_failures"
     },
     {
       "place_name": "Buruburu",
@@ -1268,7 +1113,8 @@
       "event_date": "2026-03",
       "evidence_quote": "The flooding also damaged key water supply pipelines ... affecting at least 15 estates including Dandora, Buruburu, Mathare, and parts of Eastleigh.",
       "confidence": 0.85,
-      "reject_reason": "evidence_quote not found verbatim in source"
+      "reject_reason": "evidence_quote not found verbatim in source",
+      "source_id": "asm_planning_failures"
     },
     {
       "place_name": "Mathare",
@@ -1278,7 +1124,8 @@
       "event_date": "2026-03",
       "evidence_quote": "The flooding also damaged key water supply pipelines ... affecting at least 15 estates including Dandora, Buruburu, Mathare, and parts of Eastleigh.",
       "confidence": 0.85,
-      "reject_reason": "evidence_quote not found verbatim in source"
+      "reject_reason": "evidence_quote not found verbatim in source",
+      "source_id": "asm_planning_failures"
     },
     {
       "place_name": "Eastleigh",
@@ -1288,7 +1135,140 @@
       "event_date": "2026-03",
       "evidence_quote": "The flooding also damaged key water supply pipelines ... affecting at least 15 estates including Dandora, Buruburu, Mathare, and parts of Eastleigh.",
       "confidence": 0.85,
-      "reject_reason": "evidence_quote not found verbatim in source"
+      "reject_reason": "evidence_quote not found verbatim in source",
+      "source_id": "asm_planning_failures"
+    },
+    {
+      "place_name": "Westlands",
+      "place_type": "neighbourhood",
+      "mechanism": "drainage_blockage",
+      "severity": 1,
+      "event_date": "2026-03",
+      "evidence_quote": "Weather alerts had indicated widespread heavy rain across areas including Westlands, Dagoretti, Roysambu, Kibra, Embakasi, Makadara, Kamukunji, Langata, Kasarani and Mathare, with localized downpours expected to exceed 70 millimetres in some locations.",
+      "confidence": 0.9,
+      "reject_reason": "forecast or warning, not a report of flooding",
+      "source_id": "capital_failing_drainage_2026"
+    },
+    {
+      "place_name": "Dagoretti",
+      "place_type": "neighbourhood",
+      "mechanism": "drainage_blockage",
+      "severity": 1,
+      "event_date": "2026-03",
+      "evidence_quote": "Weather alerts had indicated widespread heavy rain across areas including Westlands, Dagoretti, Roysambu, Kibra, Embakasi, Makadara, Kamukunji, Langata, Kasarani and Mathare, with localized downpours expected to exceed 70 millimetres in some locations.",
+      "confidence": 0.9,
+      "reject_reason": "forecast or warning, not a report of flooding",
+      "source_id": "capital_failing_drainage_2026"
+    },
+    {
+      "place_name": "Roysambu",
+      "place_type": "neighbourhood",
+      "mechanism": "drainage_blockage",
+      "severity": 1,
+      "event_date": "2026-03",
+      "evidence_quote": "Weather alerts had indicated widespread heavy rain across areas including Westlands, Dagoretti, Roysambu, Kibra, Embakasi, Makadara, Kamukunji, Langata, Kasarani and Mathare, with localized downpours expected to exceed 70 millimetres in some locations.",
+      "confidence": 0.9,
+      "reject_reason": "forecast or warning, not a report of flooding",
+      "source_id": "capital_failing_drainage_2026"
+    },
+    {
+      "place_name": "Kibra",
+      "place_type": "neighbourhood",
+      "mechanism": "drainage_blockage",
+      "severity": 1,
+      "event_date": "2026-03",
+      "evidence_quote": "Weather alerts had indicated widespread heavy rain across areas including Westlands, Dagoretti, Roysambu, Kibra, Embakasi, Makadara, Kamukunji, Langata, Kasarani and Mathare, with localized downpours expected to exceed 70 millimetres in some locations.",
+      "confidence": 0.9,
+      "reject_reason": "forecast or warning, not a report of flooding",
+      "source_id": "capital_failing_drainage_2026"
+    },
+    {
+      "place_name": "Embakasi",
+      "place_type": "neighbourhood",
+      "mechanism": "drainage_blockage",
+      "severity": 1,
+      "event_date": "2026-03",
+      "evidence_quote": "Weather alerts had indicated widespread heavy rain across areas including Westlands, Dagoretti, Roysambu, Kibra, Embakasi, Makadara, Kamukunji, Langata, Kasarani and Mathare, with localized downpours expected to exceed 70 millimetres in some locations.",
+      "confidence": 0.9,
+      "reject_reason": "forecast or warning, not a report of flooding",
+      "source_id": "capital_failing_drainage_2026"
+    },
+    {
+      "place_name": "Makadara",
+      "place_type": "neighbourhood",
+      "mechanism": "drainage_blockage",
+      "severity": 1,
+      "event_date": "2026-03",
+      "evidence_quote": "Weather alerts had indicated widespread heavy rain across areas including Westlands, Dagoretti, Roysambu, Kibra, Embakasi, Makadara, Kamukunji, Langata, Kasarani and Mathare, with localized downpours expected to exceed 70 millimetres in some locations.",
+      "confidence": 0.9,
+      "reject_reason": "forecast or warning, not a report of flooding",
+      "source_id": "capital_failing_drainage_2026"
+    },
+    {
+      "place_name": "Kamukunji",
+      "place_type": "neighbourhood",
+      "mechanism": "drainage_blockage",
+      "severity": 1,
+      "event_date": "2026-03",
+      "evidence_quote": "Weather alerts had indicated widespread heavy rain across areas including Westlands, Dagoretti, Roysambu, Kibra, Embakasi, Makadara, Kamukunji, Langata, Kasarani and Mathare, with localized downpours expected to exceed 70 millimetres in some locations.",
+      "confidence": 0.9,
+      "reject_reason": "forecast or warning, not a report of flooding",
+      "source_id": "capital_failing_drainage_2026"
+    },
+    {
+      "place_name": "Langata",
+      "place_type": "neighbourhood",
+      "mechanism": "drainage_blockage",
+      "severity": 1,
+      "event_date": "2026-03",
+      "evidence_quote": "Weather alerts had indicated widespread heavy rain across areas including Westlands, Dagoretti, Roysambu, Kibra, Embakasi, Makadara, Kamukunji, Langata, Kasarani and Mathare, with localized downpours expected to exceed 70 millimetres in some locations.",
+      "confidence": 0.9,
+      "reject_reason": "forecast or warning, not a report of flooding",
+      "source_id": "capital_failing_drainage_2026"
+    },
+    {
+      "place_name": "Kasarani",
+      "place_type": "neighbourhood",
+      "mechanism": "drainage_blockage",
+      "severity": 1,
+      "event_date": "2026-03",
+      "evidence_quote": "Weather alerts had indicated widespread heavy rain across areas including Westlands, Dagoretti, Roysambu, Kibra, Embakasi, Makadara, Kamukunji, Langata, Kasarani and Mathare, with localized downpours expected to exceed 70 millimetres in some locations.",
+      "confidence": 0.9,
+      "reject_reason": "forecast or warning, not a report of flooding",
+      "source_id": "capital_failing_drainage_2026"
+    },
+    {
+      "place_name": "Mathare",
+      "place_type": "neighbourhood",
+      "mechanism": "drainage_blockage",
+      "severity": 1,
+      "event_date": "2026-03",
+      "evidence_quote": "Weather alerts had indicated widespread heavy rain across areas including Westlands, Dagoretti, Roysambu, Kibra, Embakasi, Makadara, Kamukunji, Langata, Kasarani and Mathare, with localized downpours expected to exceed 70 millimetres in some locations.",
+      "confidence": 0.9,
+      "reject_reason": "forecast or warning, not a report of flooding",
+      "source_id": "capital_failing_drainage_2026"
+    },
+    {
+      "place_name": "Kasarani",
+      "place_type": "neighbourhood",
+      "mechanism": "river_overflow",
+      "severity": 1,
+      "event_date": "2024-04",
+      "evidence_quote": "Additionally, rising water levels in both the Kamiti and Athi rivers are expected to affect the Kasarani area, while Mathare would also be affected by its eponymous river.",
+      "confidence": 0.9,
+      "reject_reason": "forecast or warning, not a report of flooding",
+      "source_id": "kenyans_nps_warning"
+    },
+    {
+      "place_name": "Mathare",
+      "place_type": "neighbourhood",
+      "mechanism": "river_overflow",
+      "severity": 1,
+      "event_date": "2024-04",
+      "evidence_quote": "Additionally, rising water levels in both the Kamiti and Athi rivers are expected to affect the Kasarani area, while Mathare would also be affected by its eponymous river.",
+      "confidence": 0.9,
+      "reject_reason": "forecast or warning, not a report of flooding",
+      "source_id": "kenyans_nps_warning"
     },
     {
       "place_name": "South C",
@@ -1298,7 +1278,8 @@
       "event_date": "2026-03",
       "evidence_quote": "According to the police, the most affected areas include Mukuru, Kibra, Mathare, Huruma, South B and C, Pipeline/Embakasi, Roysambu, Kahawa West, Githurai, and parts of Westlands.",
       "confidence": 0.9,
-      "reject_reason": "place_name not in source"
+      "reject_reason": "place_name not in source",
+      "source_id": "peopledaily_death_toll_23"
     },
     {
       "place_name": "Nairobi CBD",
@@ -1308,7 +1289,8 @@
       "event_date": null,
       "evidence_quote": "There is rain (not sure if it's real El Nino) and there is failed Nairobi CBD drainage which easily makes any heavy downpour appear like El Nino, an X wrote.",
       "confidence": 0.9,
-      "reject_reason": "evidence_quote not found verbatim in source"
+      "reject_reason": "evidence_quote not found verbatim in source",
+      "source_id": "star_downpour_2024_01"
     },
     {
       "place_name": "Kibera",
@@ -1318,7 +1300,8 @@
       "event_date": null,
       "evidence_quote": "Drawing on flood modelling and mapping alongside exploratory surveys and discussions with 98 households in Kibera, Mukuru Viwandani and Mathare, the issue brief examines factors driving flood risk in Nairobi city \u2014 with a special focus on informal settlements and the associated ... using the 2024 floods as the case study.",
       "confidence": 0.9,
-      "reject_reason": "evidence_quote not found verbatim in source"
+      "reject_reason": "evidence_quote not found verbatim in source",
+      "source_id": "wri_release"
     },
     {
       "place_name": "Mukuru Viwandani",
@@ -1328,7 +1311,8 @@
       "event_date": null,
       "evidence_quote": "Drawing on flood modelling and mapping alongside exploratory surveys and discussions with 98 households in Kibera, Mukuru Viwandani and Mathare, the issue brief examines factors driving flood risk in Nairobi city \u2014 with a special focus on informal settlements and the associated ... using the 2024 floods as the case study.",
       "confidence": 0.9,
-      "reject_reason": "evidence_quote not found verbatim in source"
+      "reject_reason": "evidence_quote not found verbatim in source",
+      "source_id": "wri_release"
     },
     {
       "place_name": "Mathare",
@@ -1338,7 +1322,8 @@
       "event_date": null,
       "evidence_quote": "Drawing on flood modelling and mapping alongside exploratory surveys and discussions with 98 households in Kibera, Mukuru Viwandani and Mathare, the issue brief examines factors driving flood risk in Nairobi city \u2014 with a special focus on informal settlements and the associated ... using the 2024 floods as the case study.",
       "confidence": 0.9,
-      "reject_reason": "evidence_quote not found verbatim in source"
+      "reject_reason": "evidence_quote not found verbatim in source",
+      "source_id": "wri_release"
     }
   ]
 }

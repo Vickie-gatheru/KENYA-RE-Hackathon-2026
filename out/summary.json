@@ -1,6 +1,6 @@
 {
   "label": "MAIN RUN",
-  "tags": "exposure SYNTHETIC | hazard PROXY | vulnerability, depth scale, return periods ASSUMED | losses are GROUND-UP (before deductibles/limits)",
+  "tags": "exposure SYNTHETIC | hazard PROXY | vulnerability, depth scale, return periods ASSUMED | losses GROUND-UP unless in 'financial' (ASSUMED policy and treaty terms)",
   "total_tiv_kes": 6363470000.0,
   "n_buildings": 600,
   "baseline": {
@@ -29,7 +29,34 @@
     "aal_range_kes_m": [
       10.2,
       17.6
-    ]
+    ],
+    "incl_return_period_uncertainty": {
+      "weights_ASSUMED": {
+        "reference (10-250y)": 0.5,
+        "more frequent (5-100y)": 0.25,
+        "rarer (25-500y)": 0.25
+      },
+      "p5_kes_m": {
+        "10": 0.0,
+        "25": 37.8,
+        "50": 69.4,
+        "100": 170.1,
+        "250": 285.5
+      },
+      "p95_kes_m": {
+        "10": 97.2,
+        "25": 221.4,
+        "50": 367.4,
+        "100": 569.7,
+        "250": 619.5
+      },
+      "aal_range_kes_m": [
+        5.2,
+        33.3
+      ],
+      "aal_mean_kes_m": 15.5,
+      "note": "central estimate = reference mapping; ranges draw one mapping per run. Below a mapping's most frequent event loss = 0, beyond its rarest it is held (lower bounds)"
+    }
   },
   "rp_mapping_sensitivity": [
     {
@@ -52,8 +79,8 @@
     }
   ],
   "ai": {
-    "signals_in": 88,
-    "sites_used": 41,
+    "signals_in": 76,
+    "sites_used": 36,
     "settings": {
       "w_max": 0.3,
       "sigma_km": 0.75,
@@ -89,35 +116,35 @@
       "placebo": {
         "random_buildings": {
           "observed": 19,
-          "placebo_mean": 15.5,
+          "placebo_mean": 15.2,
           "placebo_p95": 18,
           "placebo_max": 21,
-          "p_value": 0.048,
+          "p_value": 0.03,
           "n_runs": 500
         },
         "random_city_points": {
           "observed": 19,
           "placebo_mean": 13.1,
           "placebo_p95": 15,
-          "placebo_max": 18,
+          "placebo_max": 17,
           "p_value": 0.0,
           "n_runs": 500
         }
       }
     },
     "footprint_ai": {
-      "buildings_uplifted": 152,
-      "pct_buildings": 25.333333333333336,
-      "pct_tiv": 30.10786567705984,
-      "pct_city_area": 7.529761904761904,
-      "pct_city_area_newly_wet": 3.5000000000000004
+      "buildings_uplifted": 134,
+      "pct_buildings": 22.333333333333332,
+      "pct_tiv": 24.811462928245124,
+      "pct_city_area": 6.658730158730158,
+      "pct_city_area_newly_wet": 3.115079365079365
     },
     "footprint_uniform": {
-      "buildings_uplifted": 185,
-      "pct_buildings": 30.833333333333336,
-      "pct_tiv": 32.61577409809428,
-      "pct_city_area": 9.15873015873016,
-      "pct_city_area_newly_wet": 4.376984126984127
+      "buildings_uplifted": 157,
+      "pct_buildings": 26.166666666666664,
+      "pct_tiv": 26.842194588801394,
+      "pct_city_area": 7.9484126984126995,
+      "pct_city_area_newly_wet": 3.8551587301587302
     },
     "loss_kes_m": {
       "baseline": {
@@ -128,38 +155,34 @@
         "250": 504.8
       },
       "ai": {
-        "10": 74.3,
-        "25": 120.1,
-        "50": 275.0,
-        "100": 445.8,
-        "250": 735.1
+        "10": 74.0,
+        "25": 119.6,
+        "50": 269.7,
+        "100": 424.7,
+        "250": 692.8
       },
       "uniform_ablation": {
-        "10": 78.4,
-        "25": 140.4,
-        "50": 323.7,
-        "100": 531.8,
-        "250": 820.8
+        "10": 78.2,
+        "25": 137.3,
+        "50": 302.4,
+        "100": 485.1,
+        "250": 753.9
       }
     },
     "aal_kes_m": {
       "baseline": 13.8,
-      "ai": 19.9,
-      "uniform_ablation": 22.8
+      "ai": 19.3,
+      "uniform_ablation": 21.5
     },
     "ai_100y_range_kes_m": [
-      340.0,
-      555.2
+      322.7,
+      529.6
     ],
     "sites_far_from_validation_hotspots": [
       "Central Business District",
-      "Dagoretti",
-      "Embakasi",
       "Githurai",
       "Kahawa West",
-      "Kasarani",
       "Kirinyaga Road",
-      "Langata",
       "Langata Road",
       "Lunga Lunga Road",
       "Mombasa Road",
@@ -171,11 +194,11 @@
     ],
     "signals_by_mechanism": {
       "unknown": 39,
-      "river_overflow": 22,
-      "drainage_blockage": 11,
+      "river_overflow": 20,
       "encroachment_on_drainage": 7,
       "inadequate_drainage_capacity": 7,
-      "impervious_runoff": 2
+      "impervious_runoff": 2,
+      "drainage_blockage": 1
     }
   },
   "financial": {
@@ -190,25 +213,25 @@
     "hazard": "AI-adjusted",
     "loss_kes_m": {
       "ground_up": {
-        "10": 74.3,
-        "25": 120.1,
-        "50": 275.0,
-        "100": 445.8,
-        "250": 735.1
+        "10": 74.0,
+        "25": 119.6,
+        "50": 269.7,
+        "100": 424.7,
+        "250": 692.8
       },
       "policyholder": {
-        "10": 5.7,
-        "25": 15.3,
-        "50": 30.3,
-        "100": 55.9,
-        "250": 89.1
+        "10": 5.6,
+        "25": 15.2,
+        "50": 29.4,
+        "100": 50.8,
+        "250": 85.0
       },
       "gross": {
-        "10": 68.6,
-        "25": 104.8,
-        "50": 244.6,
-        "100": 389.9,
-        "250": 646.0
+        "10": 68.4,
+        "25": 104.4,
+        "50": 240.2,
+        "100": 373.9,
+        "250": 607.8
       },
       "qs_ceded": {
         "10": 0.0,
@@ -218,16 +241,16 @@
         "250": 0.0
       },
       "xl_ceded": {
-        "10": 18.6,
-        "25": 54.8,
-        "50": 194.6,
+        "10": 18.4,
+        "25": 54.4,
+        "50": 190.2,
         "100": 250.0,
         "250": 250.0
       },
       "reinsurer": {
-        "10": 18.6,
-        "25": 54.8,
-        "50": 194.6,
+        "10": 18.4,
+        "25": 54.4,
+        "50": 190.2,
         "100": 250.0,
         "250": 250.0
       },
@@ -235,25 +258,25 @@
         "10": 50.0,
         "25": 50.0,
         "50": 50.0,
-        "100": 139.9,
-        "250": 396.0
+        "100": 123.9,
+        "250": 357.8
       }
     },
     "aal_kes_m": {
-      "ground_up": 19.9,
-      "policyholder": 2.3,
-      "gross": 17.6,
+      "ground_up": 19.3,
+      "policyholder": 2.2,
+      "gross": 17.1,
       "qs_ceded": 0.0,
-      "xl_ceded": 9.4,
-      "reinsurer": 9.4,
-      "net": 8.1
+      "xl_ceded": 9.3,
+      "reinsurer": 9.3,
+      "net": 7.7
     },
     "xl_layer": {
-      "expected_loss_kes_m": 9.4,
-      "technical_rate_on_line_pct": 3.77,
+      "expected_loss_kes_m": 9.3,
+      "technical_rate_on_line_pct": 3.73,
       "attaches_at_rp": 0.0,
-      "exhausted_at_rp": 65.1
+      "exhausted_at_rp": 68.2
     }
   },
-  "runtime_s": 178.0
+  "runtime_s": 116.7
 }

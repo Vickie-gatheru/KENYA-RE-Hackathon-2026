@@ -9,24 +9,24 @@
     "road_density",
     "informal"
   ],
-  "positives": 56,
-  "background": 560,
+  "positives": 51,
+  "background": 510,
   "spatial_cv": {
     "logistic regression": {
-      "roc_auc": 0.9310267857142857,
-      "pr_auc": 0.5324375422823744,
+      "roc_auc": 0.9528258362168397,
+      "pr_auc": 0.6646625561273481,
       "base_rate": 0.09090909090909091,
       "folds": 5
     },
     "gradient boosting": {
-      "roc_auc": 0.9178252551020408,
-      "pr_auc": 0.5148307783532101,
+      "roc_auc": 0.9460015378700501,
+      "pr_auc": 0.5752038558933632,
       "base_rate": 0.09090909090909091,
       "folds": 5
     }
   },
   "held_out_hotspot_test": {
-    "auc_ml": 0.9042919910356216,
+    "auc_ml": 0.9114354800660532,
     "auc_proxy": 0.536240858693088,
     "hotspots_in_top_10pct_ml": 18,
     "hotspots_in_top_10pct_proxy": 1,
@@ -42,7 +42,7 @@
       "informal": 0.5
     },
     "built_up_only": {
-      "auc_ml": 0.8314616285881664,
+      "auc_ml": 0.8325043936731108,
       "auc_proxy": 0.5282952548330404,
       "auc_road_density": 0.7908919156414764,
       "n_city_points": 14225
@@ -51,28 +51,28 @@
   "buffer_test": [
     {
       "buffer_km": 1.0,
-      "hotspots_with_training_place_within": 16,
-      "positives": 39,
-      "auc_ml": 0.9013,
+      "hotspots_with_training_place_within": 15,
+      "positives": 35,
+      "auc_ml": 0.9112,
       "auc_proxy": 0.5362,
       "hotspots_in_top_10pct_ml": 19
     },
     {
       "buffer_km": 2.0,
       "hotspots_with_training_place_within": 21,
-      "positives": 22,
-      "auc_ml": 0.9048,
+      "positives": 18,
+      "auc_ml": 0.9172,
       "auc_proxy": 0.5362,
       "hotspots_in_top_10pct_ml": 19
     }
   ],
   "global_importance_shap": {
-    "distance to nearest river": 1.112,
-    "built-up / paved surface density": 0.8948,
-    "distance to nearest mapped drain": 0.7866,
-    "wet ground within 500 m": 0.2959,
-    "terrain/river score at the spot": 0.1651,
-    "how low-lying the neighbourhood is (1 km)": 0.0478,
+    "built-up / paved surface density": 1.3967,
+    "distance to nearest river": 0.8049,
+    "distance to nearest mapped drain": 0.7627,
+    "terrain/river score at the spot": 0.3787,
+    "wet ground within 500 m": 0.0715,
+    "how low-lying the neighbourhood is (1 km)": 0.0099,
     "inside an informal settlement": 0.0
   }
 }

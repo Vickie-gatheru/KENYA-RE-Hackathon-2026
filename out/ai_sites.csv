@@ -1,9 +1,7 @@
 place_name,lat,lon,severity,confidence,n_sources,mechanisms,sources
 Central Business District,-1.2863575,36.8216988,1,0.9,1,inadequate_drainage_capacity,star_traffic_chaos_2024_03
-Dagoretti,-1.2835913,36.7246656,1,0.9,1,drainage_blockage,capital_failing_drainage_2026
 Dagoretti North,-1.2797593,36.7750641,1,0.95,1,unknown,standard_rickety_drainage
 Eastleigh,-1.2743401,36.8489576,1,0.9,1,inadequate_drainage_capacity,star_traffic_chaos_2024_03
-Embakasi,-1.3076101,36.934159,1,0.9,1,drainage_blockage,capital_failing_drainage_2026
 Embakasi North,-1.2510972,36.8999351,1,0.95,1,unknown,standard_rickety_drainage
 Embakasi South,-1.3323111,36.8974515,1,0.95,1,unknown,standard_rickety_drainage
 Enterprise Road,-1.3072572,36.84298,1,0.99,2,unknown,"kenyans_kdf_redcross_cbd, peopledaily_death_toll_23"
@@ -12,19 +10,16 @@ Githurai,-1.202837,36.9168588,2,0.995,2,unknown,"peopledaily_death_toll_23, stan
 Huruma,-1.2587253,36.8715039,2,0.995,2,"encroachment_on_drainage, unknown","african_mirror_42_dead, peopledaily_death_toll_23"
 Jogoo Road,-1.2969121,36.864002,1,0.9995,3,unknown,"kenyans_kdf_redcross_cbd, peopledaily_death_toll_23, standard_rickety_drainage"
 Kahawa West,-1.1863052,36.9068145,2,0.995,2,unknown,"peopledaily_death_toll_23, standard_rickety_drainage"
-Kamukunji,-1.277867,36.8617054,1,0.9,1,drainage_blockage,capital_failing_drainage_2026
-Kasarani,-1.2124598,36.8829731,1,0.9,1,drainage_blockage,capital_failing_drainage_2026
 Kayole,-1.2667475,36.9193623,2,0.95,1,unknown,standard_rickety_drainage
-Kibra,-1.3061048,36.7809577,2,0.9995,3,"drainage_blockage, encroachment_on_drainage, unknown","african_mirror_42_dead, capital_failing_drainage_2026, peopledaily_death_toll_23"
+Kibra,-1.3061048,36.7809577,2,0.995,2,"encroachment_on_drainage, unknown","african_mirror_42_dead, peopledaily_death_toll_23"
 Kilimani,-1.2960146,36.7817791,1,0.9,1,impervious_runoff,citizen_streets_rivers
 Kirinyaga Road,-1.280782,36.8277117,1,0.9,1,unknown,kenyans_kdf_redcross_cbd
 Kware Road,-1.3082433,36.8903279,1,0.9,1,unknown,kenyans_kdf_redcross_cbd
-Langata,-1.3708746,36.8184145,1,0.9,1,drainage_blockage,capital_failing_drainage_2026
 Langata Road,-1.3340427,36.7171166,1,0.95,1,unknown,standard_rickety_drainage
 Lang’ata Road,-1.3255281,36.7825924,1,0.9,1,unknown,peopledaily_death_toll_23
 Lunga Lunga Road,-1.3091742,36.8601762,1,0.9,1,unknown,kenyans_kdf_redcross_cbd
-Makadara,-1.2952187,36.8718614,1,0.995,2,"drainage_blockage, unknown","capital_failing_drainage_2026, standard_rickety_drainage"
-Mathare,-1.2584151,36.8712653,2,0.9999925,5,"drainage_blockage, encroachment_on_drainage, unknown","african_mirror_42_dead, capital_failing_drainage_2026, peopledaily_death_toll_23, standard_rickety_drainage, utwente_diagnostics"
+Makadara,-1.2952187,36.8718614,1,0.95,1,unknown,standard_rickety_drainage
+Mathare,-1.2584151,36.8712653,2,0.999925,4,"encroachment_on_drainage, unknown","african_mirror_42_dead, peopledaily_death_toll_23, standard_rickety_drainage, utwente_diagnostics"
 Mbagathi Way,-1.3148249,36.8087925,1,0.9,1,unknown,kenyans_kdf_redcross_cbd
 Mombasa Road,-1.3302358,36.8558868,1,0.9995,3,unknown,"asm_planning_failures, peopledaily_death_toll_23, standard_rickety_drainage"
 Mukuru,-1.3176821,36.8767563,2,0.995,2,"encroachment_on_drainage, unknown","african_mirror_42_dead, peopledaily_death_toll_23"
@@ -33,10 +28,10 @@ Nairobi Expressway,-1.269222,36.8059895,1,0.95,1,unknown,standard_rickety_draina
 Nairobi West,-1.3087022,36.8230975,1,0.9,1,inadequate_drainage_capacity,citizen_streets_rivers
 Pipeline,-1.3200602,36.8935826,2,0.95,1,encroachment_on_drainage,african_mirror_42_dead
 Pipeline/Embakasi,-1.3370458,36.8959243,2,0.9,1,unknown,peopledaily_death_toll_23
-Roysambu,-1.2188396,36.8867392,2,0.99,2,"drainage_blockage, unknown","capital_failing_drainage_2026, peopledaily_death_toll_23"
+Roysambu,-1.2188396,36.8867392,2,0.9,1,unknown,peopledaily_death_toll_23
 South B,-1.3141724,36.8376708,2,0.9995,3,"encroachment_on_drainage, inadequate_drainage_capacity, unknown","african_mirror_42_dead, citizen_streets_rivers, peopledaily_death_toll_23"
 South C,-1.3188367,36.8278221,2,0.995,2,"encroachment_on_drainage, inadequate_drainage_capacity","african_mirror_42_dead, citizen_streets_rivers"
 Thika Road,-1.2348175,36.8736262,1,0.95,1,unknown,standard_rickety_drainage
 Uhuru Highway,-1.2974475,36.8232982,1,0.9999,4,"inadequate_drainage_capacity, unknown","asm_planning_failures, citizen_streets_rivers, kenyans_kdf_redcross_cbd, peopledaily_death_toll_23"
-Westlands,-1.2465281,36.7860759,2,0.999,3,"drainage_blockage, inadequate_drainage_capacity, unknown","capital_failing_drainage_2026, peopledaily_death_toll_23, star_traffic_chaos_2024_03"
+Westlands,-1.2465281,36.7860759,2,0.99,2,"inadequate_drainage_capacity, unknown","peopledaily_death_toll_23, star_traffic_chaos_2024_03"
 central business district,-1.2863575,36.8216988,1,0.9,1,impervious_runoff,citizen_streets_rivers

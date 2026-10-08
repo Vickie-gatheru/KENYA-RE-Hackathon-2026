@@ -34,9 +34,10 @@ XL_LIMIT_KES = 250e6       # ... reinsurer pays the next KES 250 m ("250 m xs 50
 DEFAULT_TERMS = dict(ded_pct=DED_PCT, ded_min=DED_MIN_KES, limit_pct=LIMIT_PCT, qs=QS_CESSION,
                      retention=XL_RETENTION_KES, limit=XL_LIMIT_KES)
 LAYERS = ["ground_up", "policyholder", "gross", "qs_ceded", "xl_ceded", "reinsurer", "net"]
-LABELS = {"ground_up": "Ground-up (total damage)", "policyholder": "Kept by policyholders (deductibles)",
-          "gross": "Insured loss (cedant gross)", "qs_ceded": "Quota share ceded", "xl_ceded": "Cat XL layer ceded",
-          "reinsurer": "Paid by reinsurer", "net": "Cedant net retained"}
+# names follow the hackathon brief's terms: ground-up, deductible, limit, gross, quota share, cat XL, net
+LABELS = {"ground_up": "Ground-up loss (total damage)", "policyholder": "Kept by building owners (deductibles)",
+          "gross": "Gross loss (after deductible and limit)", "qs_ceded": "Quota share (reinsurer)",
+          "xl_ceded": "Cat excess of loss (reinsurer)", "reinsurer": "Paid by reinsurers", "net": "Net loss (insurer keeps)"}
 
 
 def policy_terms(tiv, ded_pct=DED_PCT, ded_min=DED_MIN_KES, limit_pct=LIMIT_PCT):
@@ -113,7 +114,7 @@ def simulate(d, terms=None, n_sims=500, vary_depth_scale=True, seed=42, tier_rp=
 
 def who_pays(layers, j):
     """Split of one event's ground-up loss between policyholders, cedant and reinsurer (sums to ground-up)."""
-    return {"Policyholders (deductibles)": float(layers["policyholder"][j]),
-            "Cedant (net retained)": float(layers["net"][j]),
+    return {"Building owners (deductibles)": float(layers["policyholder"][j]),
+            "Insurer (net loss)": float(layers["net"][j]),
             "Reinsurer: quota share": float(layers["qs_ceded"][j]),
-            "Reinsurer: cat XL layer": float(layers["xl_ceded"][j])}
+            "Reinsurer: cat excess of loss": float(layers["xl_ceded"][j])}

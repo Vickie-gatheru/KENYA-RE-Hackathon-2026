@@ -197,33 +197,28 @@ def _results(st, o, d_cur, S):
     tech = S.get("tech", False)
     e100 = o["events"].set_index("return_period")
     r100 = e100.loc[100] if 100 in e100.index else o["events"].iloc[-2]
+    claim_card = ([dict(label="Claimed loss", value=_k(o["claim"]["claimed_kes"]), key=True,
+                        sub=f"{o['claim']['claimed_ratio_pct']:.0f}% of insured value")] if o.get("claim") else [])
     if tech:
-        m = st.columns(4)
-        m[0].metric("Flood-proneness score", f"{o['final_score']:.2f}")
-        m[0].caption(f"higher than {o['city_percentile']:.0f}% of Nairobi" if o["final_score"] > 0 else "not flagged")
-        m[1].metric("Technical premium / yr", _k(o["aal_kes"]))
-        m[1].caption(f"{o['rate_per_mille']:.2f} ‰" + (f" vs portfolio {o['portfolio_rate']:.2f} ‰" if o.get("portfolio_rate") else "")
-                     + (f" · insured {_k(o['aal_insured_kes'])} after deductible" if "aal_insured_kes" in o else ""))
-        m[2].metric("Loss in a 1-in-100 flood", _k(r100.loss_kes))
-        m[2].caption(f"{r100.damage_pct:.0f}% damage, ~{r100.depth_m:.1f} m water")
-        if o.get("claim"):
-            m[3].metric("Claimed loss", _k(o["claim"]["claimed_kes"]))
-            m[3].caption(f"{o['claim']['claimed_ratio_pct']:.0f}% of insured value")
-        elif "port_100_after" in o:
-            m[3].metric("Portfolio 1-in-100 loss", _k(o["port_100_after"]),
-                        f"+{_k(o['port_100_after'] - o['port_100_before'])}", delta_color="inverse")
+        cards = [dict(label="Flood-proneness score", value=f"{o['final_score']:.2f}",
+                      sub=f"higher than {o['city_percentile']:.0f}% of Nairobi" if o["final_score"] > 0 else "not flagged"),
+                 dict(label="Technical premium / yr", value=_k(o["aal_kes"]), key=not o.get("claim"),
+                      sub=f"{o['rate_per_mille']:.2f} ‰" + (f" vs portfolio {o['portfolio_rate']:.2f} ‰" if o.get("portfolio_rate") else "")
+                      + (f" · insured {_k(o['aal_insured_kes'])} after deductible" if "aal_insured_kes" in o else "")),
+                 dict(label="Loss in a 1-in-100 flood", value=_k(r100.loss_kes),
+                      sub=f"{r100.damage_pct:.0f}% damage, ~{r100.depth_m:.1f} m water")]
+        if not o.get("claim") and "port_100_after" in o:
+            cards.append(dict(label="Portfolio 1-in-100 loss", value=_k(o["port_100_after"]),
+                              sub=f"+{_k(o['port_100_after'] - o['port_100_before'])} from writing this risk"))
     else:
-        m = st.columns(4 if o.get("claim") else 3)
-        m[0].metric("Flood premium / yr", _k(o["aal_kes"]))
-        m[0].caption(f"minimum, before expenses and profit · {o['rate_per_mille']:.2f} per KES 1,000 insured")
-        m[1].metric("Loss in a 1-in-100 flood", _k(r100.loss_kes))
-        m[1].caption(f"1% chance a year · {r100.damage_pct:.0f}% of the building's value")
         top = 100 - o["city_percentile"]
-        m[2].metric("Compared with Nairobi", f"Top {max(top, 1):.0f}%" if o["final_score"] > 0 else "Not on flood map")
-        m[2].caption("most flood-prone locations" if o["final_score"] > 0 else "no mapped flood risk at the site")
-        if o.get("claim"):
-            m[3].metric("Claimed loss", _k(o["claim"]["claimed_kes"]))
-            m[3].caption(f"{o['claim']['claimed_ratio_pct']:.0f}% of insured value")
+        cards = [dict(label="Flood premium / yr", value=_k(o["aal_kes"]), key=not o.get("claim"),
+                      sub=["minimum, before expenses and profit", f"{o['rate_per_mille']:.2f} per KES 1,000 insured"]),
+                 dict(label="Loss in a 1-in-100 flood", value=_k(r100.loss_kes),
+                      sub=["1% chance a year", f"{r100.damage_pct:.0f}% of the building's value"]),
+                 dict(label="Compared with Nairobi", value=f"Top {max(top, 1):.0f}%" if o["final_score"] > 0 else "Not on flood map",
+                      sub=["most flood-prone", "locations in the city"] if o["final_score"] > 0 else "no mapped flood risk at the site")]
+    st.markdown(brand.kpis(cards + claim_card, min_px=160), unsafe_allow_html=True)
     if o.get("claim"):
         st.info(o["claim"]["text"])
     if o["flags"]:

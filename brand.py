@@ -46,33 +46,35 @@ h1, h2, h3, h4 {{ letter-spacing: -0.01em; }}
 h1 {{ border-bottom: 3px solid {CRIMSON}; padding-bottom: .25rem; display: inline-block; }}
 [data-testid="stMetricValue"] {{ color: {NAVY}; font-family: Archivo, Roboto, sans-serif; font-size: 1.85rem; }}
 [data-testid="stMetricValue"] > div {{ overflow: visible; text-overflow: clip; }}
-/* sidebar navigation: icon menu with a filled pill for the current page (no radio circles) */
+/* sidebar navigation: grouped page links (st.page_link) in keyed containers - .st-key-* classes are Streamlit's
+   supported styling hook; the current page sits in .st-key-kre_nav_on */
 [data-testid="stSidebar"] > div:first-child {{ background: #F2F4F7; }}
 [data-testid="stSidebarUserContent"] {{ background: linear-gradient(180deg, {NAVY} 0%, #0A2A4F 100%); border-radius: 16px;
   margin: .75rem; padding: 1.25rem 1rem; box-shadow: 0 4px 18px rgba(4, 29, 59, .25); }}
-[data-testid="stSidebar"] [data-testid="stElementContainer"]:has([data-testid="stRadio"]),
-[data-testid="stSidebar"] [data-testid="stRadio"] {{ width: 100% !important; }}
-[data-testid="stSidebar"] [role="radiogroup"] {{ gap: .25rem; width: 100%; }}
-[data-testid="stSidebar"] [role="radiogroup"] > div, [data-testid="stSidebar"] [role="radiogroup"] > label {{ width: 100%; }}
-[data-testid="stSidebar"] label[data-testid="stRadioOption"] {{ width: 100%; padding: .7rem .9rem; border-radius: 10px; margin: 0;
-  transition: background .15s ease; cursor: pointer; }}
-[data-testid="stSidebar"] label[data-testid="stRadioOption"] > div > div:first-child:not([data-testid]) {{ display: none; }}
-[data-testid="stSidebar"] label[data-testid="stRadioOption"] p {{ font-size: 1rem; color: #E6ECF3; display: flex; align-items: center; gap: .75rem; }}
-[data-testid="stSidebar"] label[data-testid="stRadioOption"] p span[data-testid="stIconMaterial"],
-[data-testid="stSidebar"] label[data-testid="stRadioOption"] p span:first-child {{ font-size: 1.3rem; width: 1.4rem; color: #9FB3CC; }}
-[data-testid="stSidebar"] label[data-testid="stRadioOption"]:hover {{ background: rgba(255, 255, 255, .08); }}
-[data-testid="stSidebar"] label[data-testid="stRadioOption"]:has(input:checked) {{ background: {CRIMSON};
+.kre-nav-group {{ font-size: .68rem; letter-spacing: .08em; text-transform: uppercase; color: #7F93AD; font-weight: 700;
+  margin: .6rem 0 .1rem .3rem; }}
+.st-key-kre_nav, .st-key-kre_nav [data-testid="stVerticalBlock"] {{ gap: .2rem; }}
+.st-key-kre_nav a[data-testid="stPageLink-NavLink"] {{ padding: .5rem .8rem; border-radius: 10px; background: transparent; }}
+.st-key-kre_nav a[data-testid="stPageLink-NavLink"]:hover {{ background: rgba(255, 255, 255, .08); }}
+.st-key-kre_nav a[data-testid="stPageLink-NavLink"] span,
+.st-key-kre_nav a[data-testid="stPageLink-NavLink"] p {{ color: #E6ECF3 !important; font-size: .98rem; }}
+.st-key-kre_nav a[data-testid="stPageLink-NavLink"] [data-testid="stIconMaterial"] {{ color: #9FB3CC !important; font-size: 1.25rem; }}
+.st-key-kre_nav_on a[data-testid="stPageLink-NavLink"] {{ background: {CRIMSON} !important;
   box-shadow: 0 2px 10px rgba(195, 13, 53, .45); }}
-[data-testid="stSidebar"] label[data-testid="stRadioOption"]:has(input:checked) p,
-[data-testid="stSidebar"] label[data-testid="stRadioOption"]:has(input:checked) p span {{ color: #FFFFFF !important; font-weight: 700; }}
+.st-key-kre_nav_on a[data-testid="stPageLink-NavLink"] span, .st-key-kre_nav_on a[data-testid="stPageLink-NavLink"] p,
+.st-key-kre_nav_on a[data-testid="stPageLink-NavLink"] [data-testid="stIconMaterial"] {{ color: #FFFFFF !important; font-weight: 700; }}
+/* sidebar expanders (analyst controls): light heading on the navy panel, white body with navy text */
 [data-testid="stSidebar"] [data-testid="stExpander"] summary,
 [data-testid="stSidebar"] [data-testid="stExpander"] summary p,
-[data-testid="stSidebar"] [data-testid="stExpander"] summary svg,
-[data-testid="stSidebar"] [data-testid="stExpander"] [data-testid="stMarkdown"],
-[data-testid="stSidebar"] [data-testid="stExpander"] [data-testid="stCaptionContainer"],
-[data-testid="stSidebar"] [data-testid="stExpander"] label,
-[data-testid="stSidebar"] [data-testid="stExpander"] label p,
-[data-testid="stSidebar"] [data-testid="stExpander"] label span {{ color: {NAVY} !important; }}
+[data-testid="stSidebar"] [data-testid="stExpander"] summary svg {{ color: #E6ECF3 !important; fill: #E6ECF3; }}
+[data-testid="stSidebar"] [data-testid="stExpander"] details {{ border-color: rgba(255, 255, 255, .18); }}
+[data-testid="stSidebar"] [data-testid="stExpanderDetails"] {{ background: #FFFFFF; border-radius: 0 0 8px 8px; }}
+[data-testid="stSidebar"] [data-testid="stExpanderDetails"] [data-testid="stMarkdown"],
+[data-testid="stSidebar"] [data-testid="stExpanderDetails"] [data-testid="stCaptionContainer"],
+[data-testid="stSidebar"] [data-testid="stExpanderDetails"] label,
+[data-testid="stSidebar"] [data-testid="stExpanderDetails"] label p,
+[data-testid="stSidebar"] [data-testid="stExpanderDetails"] label span {{ color: {NAVY} !important; }}
+[data-testid="stSidebar"] [data-testid="stCaptionContainer"] {{ color: #9FB3CC; }}
 /* navy carries the layout, crimson is the accent */
 [data-testid="stMetric"] {{ background: #F4F7FB; border: 1px solid {GRID}; border-left: 4px solid {NAVY};
   border-radius: 12px; padding: .8rem 1rem; }}
@@ -117,13 +119,18 @@ SIDEBAR_BRAND = (f"<div style='display:flex;align-items:center;gap:.8rem'>"
                  f"<hr style='border:none;border-top:1px solid rgba(255,255,255,.15);margin:1rem 0 .5rem'>")
 
 
-def page_header(title, subtitle_html):
-    """Navy banner with a crimson accent bar - the page title block."""
-    return (f"<div style='background:linear-gradient(120deg,{NAVY} 0%,#0B2F5C 70%,#123E73 100%);border-radius:16px;"
-            f"padding:1.3rem 1.6rem 1.2rem;margin:0 0 1.2rem;box-shadow:0 4px 18px rgba(4,29,59,.18)'>"
-            f"<div style='width:44px;height:4px;background:{CRIMSON};border-radius:2px;margin-bottom:.75rem'></div>"
-            f"<div style='font-family:Archivo,sans-serif;font-size:2rem;font-weight:700;color:#fff;line-height:1.15'>{title}</div>"
-            f"<div style='color:#C9D6E6;font-size:.82rem;margin-top:.5rem;line-height:1.5'>{subtitle_html}</div></div>")
+def page_header(title, subtitle_html, intro=None):
+    """Compact page title: the name, an optional one-line purpose, and the data caveats folded into one line that
+    opens on click (kept visible on every page, but small)."""
+    short = "Prototype · synthetic portfolio · estimated flood map · assumed terms"
+    return (f"<div style='margin:0 0 .9rem'>"
+            f"<div style='display:flex;align-items:center;gap:.6rem'><span style='width:5px;height:1.7rem;"
+            f"background:{CRIMSON};border-radius:3px'></span><span style='font-family:Archivo,sans-serif;font-size:1.75rem;"
+            f"font-weight:700;color:{NAVY};line-height:1.1'>{title}</span></div>"
+            + (f"<div style='color:#3A4554;font-size:.92rem;margin:.35rem 0 0 .9rem'>{intro}</div>" if intro else "")
+            + f"<details style='margin:.35rem 0 0 .9rem;font-size:.76rem;color:{MUTED}'><summary style='cursor:pointer;"
+            f"list-style:none'>ⓘ {short} <span style='text-decoration:underline'>what this means</span></summary>"
+            f"<div style='margin-top:.3rem;max-width:760px;line-height:1.5'>{subtitle_html}</div></details></div>")
 
 
 # loading overlay: the mark's three pieces drift apart and snap back together while the app is busy. Shown only while
@@ -134,6 +141,7 @@ _LOADER_CSS = """<style>
 body:has([data-testid="stStatusWidget"]) .kre-loader { display: flex; animation: kre-in .3s ease .6s forwards; }
 @keyframes kre-in { to { opacity: 1; } }
 body:has([data-testid="stChatInput"]) .kre-loader { display: none !important; }   /* assistant: has its own "Thinking..." */
+body:has(.kre-agent-live) .kre-loader { display: none !important; }   /* review agent: shows its own live steps */
 .kre-mark { position: relative; width: 92px; height: 112px; animation: kre-breathe 1.8s ease-in-out infinite; }
 .kre-mark img { position: absolute; inset: 0; width: 100%; height: 100%; }
 .kre-mark .kre-grey { animation: kre-grey 1.8s cubic-bezier(.65, 0, .35, 1) infinite; }
@@ -226,7 +234,7 @@ _BRIEF_CSS = """<style>
 </style>""".replace("__GRID__", GRID).replace("__NAVY__", NAVY).replace("__CRIMSON__", CRIMSON).replace("__BLUE__", BLUE)
 
 
-def briefing_html(b, audience="underwriter"):
+def briefing_html(b, audience="underwriter", show_top=True):
     """Compact card: stance + headline, then the drivers as small cards (click one for the detail) and the next steps /
     questions folded away with a count, so the underwriter takes it in at a glance."""
     import html as _h
@@ -241,8 +249,10 @@ def briefing_html(b, audience="underwriter"):
            if b["source"] == "ai" else "Rule-based summary")
     ask = "Ask the broker" if audience == "underwriter" else "Worth checking"
     return _BRIEF_CSS + (
-        f"<div class='kre-brief'><div class='top'><span class='pill {b['tone']}'>{e(b['stance'])}</span>"
-        f"<span class='src'>{e(src)}</span></div><div class='hl'>{e(b['headline'])}</div>"
-        f"<div class='drvs'>{drv}</div>"
+        f"<div class='kre-brief'>"
+        + (f"<div class='top'><span class='pill {b['tone']}'>{e(b['stance'])}</span>"
+           f"<span class='src'>{e(src)}</span></div><div class='hl'>{e(b['headline'])}</div>" if show_top else
+           f"<div class='top'><b style='color:{NAVY};font-size:.9rem'>Why</b><span class='src'>{e(src)}</span></div>")
+        + f"<div class='drvs'>{drv}</div>"
         f"<div class='grid'>{fold('Next steps', b['actions'])}{fold(ask, b['questions'])}</div>"
         f"<div class='cav'>ⓘ {e(b['caveat'])}</div></div>")

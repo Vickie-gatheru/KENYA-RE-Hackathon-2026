@@ -144,26 +144,44 @@ _mp = ml.MODEL_PATH
 bundle = load_ml(os.path.getmtime(_mp) if os.path.exists(_mp) else 0)
 
 # ================================================================== sidebar
-UW_PAGES = ["Evaluate a risk or claim", "Portfolio overview", "Insurance & reinsurance", "Accumulation", "Ask the assistant"]
+UW_PAGES = ["Evaluate a risk or claim", "Portfolio overview", "Accumulation", "Insurance & reinsurance", "Ask the assistant"]
 TECH_PAGES = ["AI drainage evidence", "ML flood model", "Sensitivity & assumptions"]
-st.markdown(brand.CSS, unsafe_allow_html=True)
-st.sidebar.markdown(brand.SIDEBAR_BRAND, unsafe_allow_html=True)
-nav = st.sidebar.container()           # filled after the 'Model details' switch is read
-ctrl = st.sidebar.container()
-st.sidebar.divider()
-tech = st.sidebar.toggle("Model details", value=False,
-                         help="For analysts and judges: shows how the AI and ML layers were tested, every modelling "
-                              "assumption as a live control, and the full technical working.")
 NAV_LABEL = {"Evaluate a risk or claim": "Evaluate", "Portfolio overview": "Portfolio",
              "Insurance & reinsurance": "Reinsurance", "Ask the assistant": "Assistant",
              "AI drainage evidence": "AI flood evidence", "Sensitivity & assumptions": "Assumptions"}
 PAGE_ICON = {"Evaluate a risk or claim": "fact_check", "Portfolio overview": "space_dashboard",
              "Insurance & reinsurance": "shield", "Accumulation": "stacked_bar_chart", "Ask the assistant": "forum",
              "AI drainage evidence": "article", "ML flood model": "hub", "Sensitivity & assumptions": "tune"}
-page = nav.radio("Go to", UW_PAGES + (TECH_PAGES if tech else []), label_visibility="collapsed",
-                 format_func=lambda p: f":material/{PAGE_ICON[p]}: {NAV_LABEL.get(p, p)}")
+URL = {"Evaluate a risk or claim": "evaluate", "Portfolio overview": "portfolio", "Accumulation": "accumulation",
+       "Insurance & reinsurance": "reinsurance", "Ask the assistant": "assistant", "AI drainage evidence": "ai-evidence",
+       "ML flood model": "ml-model", "Sensitivity & assumptions": "assumptions"}
+st.markdown(brand.CSS, unsafe_allow_html=True)
+st.sidebar.markdown(brand.SIDEBAR_BRAND, unsafe_allow_html=True)
+nav = st.sidebar.container(key="kre_nav")    # filled once the current page is known
+ctrl = st.sidebar.container()
+st.sidebar.divider()
+tech = st.sidebar.toggle("Analyst mode", value=False,
+                         help="For analysts and judges: adds the Model analysis pages (how the AI and ML layers were "
+                              "tested), every modelling assumption as a live control, and the full technical working.")
+
+
+def _page_stub():
+    """Pages are drawn by this script (branches on `page` below); st.navigation only tracks which one is open."""
+
+
+PAGES = {p: st.Page(_page_stub, title=NAV_LABEL.get(p, p), url_path=URL[p], icon=f":material/{PAGE_ICON[p]}:",
+                    default=(p == UW_PAGES[0])) for p in UW_PAGES + (TECH_PAGES if tech else [])}
+_pg = st.navigation(list(PAGES.values()), position="hidden")
+page = next(p for p, v in PAGES.items() if v.url_path == _pg.url_path)
+with nav:
+    for group, items in [("Underwrite", UW_PAGES)] + ([("Model analysis", TECH_PAGES)] if tech else []):
+        st.markdown(f"<div class='kre-nav-group'>{group}</div>", unsafe_allow_html=True)
+        for p in items:
+            with st.container(key=f"kre_nav_on" if p == page else f"kre_nav_{URL[p].replace('-', '_')}"):
+                st.page_link(PAGES[p], label=NAV_LABEL.get(p, p), icon=f":material/{PAGE_ICON[p]}:")
+_pg.run()
 have_sites, have_ml = sites is not None and len(sites) > 0, bundle is not None
-# defaults = what an underwriter sees; 'Model details' exposes each as a control
+# defaults = what an underwriter sees; 'Analyst mode' exposes each as a control
 mapping_name, depth_scale, n_sims = list(cm.RP_MAPPINGS)[0], cm.DEPTH_SCALE_M, 500
 use_ai, mode, w_max, sigma, w_ml = have_sites or have_ml, "ai", ai.W_MAX, ai.SIGMA_KM, ml.W_ML
 use_sites, use_ml = have_sites, have_ml
@@ -224,12 +242,13 @@ if tech:
                "reinsured" + (" · AI hazard uplift <b>on</b>" if use_ai else ""))
 else:
     _labels = ("Prototype · <b>SYNTHETIC</b> portfolio · flood map is an <b>estimate</b> from terrain and rivers, improved "
-               "with flood reports · prices and policy terms use stated <b>ASSUMPTIONS</b> (switch on <i>Model details</i> "
+               "with flood reports · prices and policy terms use stated <b>ASSUMPTIONS</b> (switch on <i>Analyst mode</i> "
                "to see them)")
 if page == "Ask the assistant":
-    st.caption(_labels.replace("<b>", "**").replace("</b>", "**").replace("<i>", "*").replace("</i>", "*"))
+    st.caption("Prototype · synthetic portfolio · estimated flood map · assumed terms")
 else:
-    st.markdown(brand.page_header(page, _labels), unsafe_allow_html=True)
+    INTRO = {"Evaluate a risk or claim": "Price a new risk, check a flood claim, or review a broker's submission."}
+    st.markdown(brand.page_header(page, _labels, INTRO.get(page)), unsafe_allow_html=True)
 loss_cur = cur["loss"]
 
 # ================================================================== 0. evaluate a risk or claim

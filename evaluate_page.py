@@ -33,7 +33,8 @@ def _k(x):
 
 def _chip(text, colours):
     bg, fg = colours
-    return (f"<span style='background:{bg};color:{fg};padding:4px 12px;border-radius:999px;font-weight:600'>"
+    return (f"<span style='background:{bg};color:{fg};padding:4px 12px;border-radius:999px;font-weight:600;"
+            f"display:inline-block;margin:0 6px 6px 0'>"
             f"{text}</span>")
 
 
@@ -155,6 +156,94 @@ def _submission_html(o):
     return _SUB_CSS + f"<div class='kre-sub'>{top}{vs}{shape}{flags}</div>"
 
 
+_AGENT_CSS = """<style>
+.kre-agent { border: 1px solid __GRID__; border-radius: 14px; padding: 14px 18px 12px; background: #fff;
+  box-shadow: 0 2px 10px rgba(4, 29, 59, .06); margin: .3rem 0 .6rem; }
+.kre-agent .top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: .7rem; }
+.kre-agent .top b { font-family: Archivo, Roboto, sans-serif; color: __NAVY__; font-size: 1rem; }
+.kre-agent .pill { padding: 3px 10px; border-radius: 999px; font-weight: 700; font-size: .76rem; background: #ECF0F4;
+  color: __NAVY__; }
+.kre-agent .src { font-size: .72rem; color: #5B6470; margin-left: auto; }
+.kre-agent .cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+.kre-agent h6 { font-size: .7rem; letter-spacing: .04em; text-transform: uppercase; color: #5B6470; margin: 0 0 .5rem;
+  font-weight: 700; padding: 0; }
+.kre-agent .case { display: grid; grid-template-columns: 150px 1fr 64px; gap: 8px; align-items: center; font-size: .78rem;
+  color: #3A4554; margin-bottom: 6px; }
+.kre-agent .case .bar { height: 12px; border-radius: 0 4px 4px 0; }
+.kre-agent .case .v { text-align: right; font-weight: 700; color: __NAVY__; }
+.kre-agent .range { font-size: .8rem; color: #3A4554; margin-top: .4rem; }
+.kre-agent .range b { color: __NAVY__; }
+.kre-agent ol { list-style: none; margin: 0; padding: 0; counter-reset: s; }
+.kre-agent li { position: relative; padding: 0 0 10px 30px; counter-increment: s; }
+.kre-agent li::before { content: counter(s); position: absolute; left: 0; top: 0; width: 20px; height: 20px;
+  border-radius: 50%; background: __NAVY__; color: #fff; font-size: .7rem; display: flex; align-items: center;
+  justify-content: center; font-weight: 700; }
+.kre-agent li:not(:last-child)::after { content: ''; position: absolute; left: 9.5px; top: 22px; bottom: 2px; width: 1px;
+  background: #C9D2DE; }
+.kre-agent li b { font-size: .82rem; color: __NAVY__; display: block; }
+.kre-agent li .why { font-size: .74rem; color: #8A94A3; display: block; }
+.kre-agent li .res { font-size: .79rem; color: #1D2430; display: block; margin-top: 1px; }
+.kre-agent .sum { background: #F4F7FB; border-radius: 10px; padding: 9px 12px; font-size: .84rem; color: #1D2430;
+  line-height: 1.5; margin-top: .6rem; }
+@media (max-width: 640px) { .kre-agent .case { grid-template-columns: 110px 1fr 56px; } }
+</style>""".replace("__GRID__", GRID).replace("__NAVY__", brand.NAVY)
+
+
+def _review_html(o, r):
+    """The agent's result: expected loss under each case it priced, the steps it took (why + what it found), and its
+    summary. Every number here comes from a tool result."""
+    import html
+    import review_agent as ra
+    e = html.escape
+    cs = ra.cases(o, r["steps"])
+    top = max(v for _, v, _ in cs) or 1
+    colour = {"base": brand.NAVY, "case": BLUE, "diagnostic": "#C9D2DE"}
+    bars = "".join(f"<div class='case'><span>{e(lbl)}</span><div class='bar' style='width:{max(v / top, .01) * 100:.0f}%;"
+                   f"background:{colour[k]}'></div><span class='v'>KES {v:.1f}m</span></div>" for lbl, v, k in cs)
+    lo, hi = r["range_m"]
+    steps = "".join(f"<li><b>{e(s_['label'])}</b><span class='why'>{e(s_['why'])}</span>"
+                    f"<span class='res'>{e(ra.step_text(s_))}</span></li>" for s_ in r["steps"])
+    src = ("AI-planned · numbers checked ✓" + (f" · {r['dropped']} unsupported item(s) removed" if r["dropped"] else "")
+           if r["source"] == "ai" else "Rule-based plan (no AI available)")
+    return _AGENT_CSS + (
+        f"<div class='kre-agent'><div class='top'><b>Review agent</b><span class='pill'>{len(r['steps'])} steps</span>"
+        f"<span class='src'>{e(src)}</span></div><div class='cols'>"
+        f"<div><h6>Expected flood loss per year, by case</h6>{bars}<div class='range'>Likely between "
+        f"<b>KES {lo:.1f} m</b> and <b>KES {hi:.1f} m</b> a year (grey: shown for comparison, not a likely case)."
+        f"</div></div><div><h6>What the agent did</h6><ol>{steps}</ol></div></div>"
+        f"<div class='sum'>{e(r['summary'])}</div></div>")
+
+
+def _review_agent(st, o, d_cur, S):
+    """Button -> the agent investigates the submission's flags (live steps), then its result card and draft email."""
+    import review_agent as ra
+    key = (o["label"], round(o["tiv_kes"]), round(o["lat"], 5), round(o["lon"], 5), o["housing_class"])
+    store = st.session_state.setdefault("reviews", {})
+    if key not in store:
+        c1, c2 = st.columns([1, 2], vertical_alignment="center")
+        go_ = c1.button("🔎 Run the review agent", key="run_review", use_container_width=True)
+        c2.caption("The agent investigates the flags: prices the other possible location, tests the basement "
+                   "assumption, checks how much the AI flood layers matter, pulls flood reports, and drafts questions "
+                   "for the broker.")
+        if not go_:
+            return
+        use = llm.configured() and llm.provider() != "test"
+        ctx = dict(o=o, f=o["submission"]["raw"], flags=o["submission"]["flags"], d=d_cur, S=S)
+        live = st.empty()
+        live.markdown("<div class='kre-agent-live'></div>", unsafe_allow_html=True)
+        with st.status("Review agent investigating the submission...", expanded=True) as box:
+            res = ra.run(ctx, (lambda p: llm.complete(p, json_mode=True)) if use else None,
+                         on_step=lambda s_: box.write(f"✓ **{s_['label']}** · {ra.step_text(s_)}"))
+            box.update(label=f"Review done · {len(res['steps'])} steps", state="complete", expanded=False)
+        live.empty()
+        store[key] = res
+    r = store[key]
+    st.markdown(_review_html(o, r), unsafe_allow_html=True)
+    with st.expander("✉ Draft email to the broker - not sent"):
+        st.text_area("Draft email", r["email"], height=270, label_visibility="collapsed", key=f"email_{hash(key)}")
+        st.caption("A draft for you to edit and send yourself. The agent never sends anything.")
+
+
 def _locate(how, place, lat, lon, example, hs, d):
     if how == "Coordinates":     # a pin: clicked or typed = exact; placed by search = an area or road, less exact
         exact = place in ("", "Pin", "Pinned location", "Typed coordinates")
@@ -183,67 +272,92 @@ def _circle(lat, lon, r_km, n=72):
     return lat + (r_km / 111.32) * np.sin(t), lon + (r_km / (111.32 * np.cos(np.radians(lat)))) * np.cos(t)
 
 
+MODES = {"Proposal": "A new risk (proposal)", "Claim": "A flood claim", "Submission": SUB_KIND}
+_STEP_CSS = """<style>
+.kre-step { display: flex; align-items: center; gap: .5rem; font-family: Archivo, Roboto, sans-serif; font-weight: 700;
+  color: __NAVY__; font-size: .95rem; margin: .9rem 0 .2rem; }
+.kre-step span { width: 22px; height: 22px; border-radius: 50%; background: __NAVY__; color: #fff; font-size: .72rem;
+  display: inline-flex; align-items: center; justify-content: center; }
+</style>""".replace("__NAVY__", brand.NAVY)
+
+
+def _step(st, n, text):
+    st.markdown(_STEP_CSS + f"<div class='kre-step'><span>{n}</span>{text}</div>", unsafe_allow_html=True)
+
+
+def _description_inputs(st, d):
+    """A short free-text description (e.g. from an email), read by the LLM into place, building type and value."""
+    txt = st.text_area("Description", height=110, label_visibility="collapsed",
+                       placeholder="e.g. Semi-permanent shop in Kibera near the railway, insured for KES 1.5m")
+    if not llm.configured():
+        st.caption("Reading a description needs an LLM (LLM_PROVIDER and an API key).")
+    if st.button("Read and evaluate", type="primary", use_container_width=True, disabled=not llm.configured() or not txt):
+        try:
+            rows, notes = uw.parse_submission(txt, lambda p: llm.complete(p, json_mode=True))
+            if rows:
+                r0 = uw.complete_values(rows[:1], uw.class_defaults(d)).iloc[0]
+                st.session_state.parsed = dict(place=r0.place_name, cls=r0.housing_class, tiv=float(r0.tiv_kes))
+                st.success(f"Read: {NICE[r0.housing_class]} at '{r0.place_name}', KES {r0.tiv_kes:,.0f}.")
+            for n in notes:
+                st.warning(n)
+        except Exception as e:
+            st.error(f"Could not read it: {e}")
+
+
 def render(st, S):
     d, d_cur, hs = S["d"], S["d_cur"], S["hs"]
     tech = S.get("tech", False)
-    st.markdown("Check a **new risk** or a **flood claim**: where it is, what kind of building, and its value. "
-                "The result compares the site with the Nairobi flood map, nearby insured buildings and flood reports.")
     left, right = st.columns([1, 2.3], gap="large")
+    how, place, lat, lon, example = "Example location", "", -1.30, 36.80, None
+    cls, tiv, claim, radius, k, run, sub = "semi_permanent", 2_000_000, None, 1.0, 10, False, None
 
     with left:
-        kind = st.radio("What are you evaluating?", ["A new risk (proposal)", "A flood claim", SUB_KIND],
-                        horizontal=False)
-        sub = None
+        mode = st.segmented_control("What are you evaluating?", list(MODES), default="Proposal", key="eval_mode") \
+            or "Proposal"
+        kind = MODES[mode]
         if kind == SUB_KIND:
-            sub = _submission_inputs(st)
-            run = st.button("Evaluate", type="primary", use_container_width=True, disabled=sub is None)
-            run = run or (sub is not None and sub["key"] != st.session_state.get("sub_done"))
+            src = st.segmented_control("Submission", ["PDF", "Short description"], default="PDF", key="sub_src",
+                                       label_visibility="collapsed") or "PDF"
+            if src == "PDF":
+                sub = _submission_inputs(st)
+                run = st.button("Evaluate", type="primary", use_container_width=True, disabled=sub is None)
+                run = run or (sub is not None and sub["key"] != st.session_state.get("sub_done"))
+            else:
+                _description_inputs(st, d)
         else:
-            how = st.radio("Location", ["Example location", "Place or address", "Coordinates"], horizontal=True,
-                           format_func=lambda x: {"Example location": "Choose from list", "Coordinates": "Pin on a map"}.get(x, x))
-            place, lat, lon, example = "", -1.30, 36.80, None
+            _step(st, 1, "Location")
+            how = st.segmented_control("Location", ["Example location", "Place or address", "Coordinates"],
+                                       default="Example location", key="eval_how", label_visibility="collapsed",
+                                       format_func=lambda x: {"Example location": "From list",
+                                                              "Place or address": "Address",
+                                                              "Coordinates": "Pin on map"}[x]) or "Example location"
             if how == "Place or address":
                 place = st.text_input("Place, estate or road in Nairobi", "Kibera",
                                       help="Found on OpenStreetMap (needs internet). County hotspot names work offline.")
             elif how == "Coordinates":
                 import pin_picker
-                lat, lon, place = pin_picker.pick_location(st, "eval", hotspots=hs, height=300)
+                lat, lon, place = pin_picker.pick_location(st, "eval", hotspots=hs, height=280)
             else:
                 options = list(hs.name) + list(d.loc_id)
                 example = st.selectbox("Area or insured building", options,
                                        index=options.index("Mathare") if "Mathare" in options else 0)
+            _step(st, 2, "Building")
             cls = st.selectbox("Building type", list(NICE), format_func=NICE.get, index=1)
+            _step(st, 3, "Value" if kind != "A flood claim" else "Value and claim")
             tiv = st.number_input("Insured value (KES)", min_value=10_000, value=2_000_000, step=100_000)
-            claim = None
             if kind == "A flood claim":
                 claim = st.number_input("Claimed loss (KES)", min_value=0, value=400_000, step=50_000)
-            radius, k = 1.0, 10
             if tech:
                 with st.expander("Comparison settings"):
                     radius = st.slider("Search radius for nearby assets (km)", 0.5, 3.0, 1.0, 0.25)
                     k = st.slider("Maximum nearby assets to compare", 5, 20, 10)
+            st.write("")
             run = st.button("Evaluate", type="primary", use_container_width=True)
-            with st.expander("Or paste the broker's or claim description"):
-                txt = st.text_area("Description", height=90, placeholder="e.g. Semi-permanent shop in Kibera near the "
-                                   "railway, insured for KES 1.5m")
-                if st.button("Read description", disabled=not llm.configured()):
-                    try:
-                        rows, notes = uw.parse_submission(txt, lambda p: llm.complete(p, json_mode=True))
-                        if rows:
-                            r0 = uw.complete_values(rows[:1], uw.class_defaults(d)).iloc[0]
-                            st.session_state.parsed = dict(place=r0.place_name, cls=r0.housing_class, tiv=float(r0.tiv_kes),
-                                                           basis=r0.value_basis)
-                            st.success(f"Read: {NICE[r0.housing_class]} at '{r0.place_name}', KES {r0.tiv_kes:,.0f} "
-                                       f"({r0.value_basis}). Evaluating...")
-                        for n in notes:
-                            st.warning(n)
-                    except Exception as e:
-                        st.error(f"Could not read it: {e}")
-                if not llm.configured():
-                    st.caption("Needs LLM_PROVIDER and an API key.")
 
     # ---- run the evaluation
     parsed = st.session_state.pop("parsed", None)
+    if parsed:
+        how, place, cls, tiv, run = "Place or address", parsed["place"], parsed["cls"], parsed["tiv"], True
     if sub is not None and run:
         try:
             o = ev.evaluate(d_cur, sub["lat"], sub["lon"], sub["cls"], sub["tiv"], location_source=sub["src"],
@@ -252,34 +366,32 @@ def render(st, S):
         except ValueError as e:
             right.error(str(e)); return
         st.session_state.evaluation = sb.apply(o, sub["facts"], sub["flags"], sub["name"])
-        st.session_state.sub_done = sub["key"]
-        run = False
-    elif kind == SUB_KIND and sub is None and not (st.session_state.get("evaluation") or {}).get("submission"):
-        right.info("Upload a broker's submission (PDF). The location, building and insured value are read from it, "
-                   "every fact with the line it came from, and the submission's own figures are checked.")
-        return
-    if parsed:
-        how, place, cls, tiv = "Place or address", parsed["place"], parsed["cls"], parsed["tiv"]
-        run = True
-    if kind != SUB_KIND and (run or "evaluation" not in st.session_state):
+        st.session_state.sub_done, st.session_state.eval_from = sub["key"], "submission"
+    elif parsed or (kind != SUB_KIND and (run or "evaluation" not in st.session_state
+                                         or st.session_state.get("eval_from") != "form")):
         loc = _locate(how, place, lat, lon, example or "Mathare", hs, d)
         if loc is None:
-            right.error(f"Could not find '{place}'. Try a nearby estate name, or enter coordinates.")
+            right.error(f"Could not find '{place}'. Try a nearby estate name, or drop a pin on the map.")
             return
-        la, lo, src, where = loc
+        la, lo, src_, where = loc
         try:
-            o = ev.evaluate(d_cur, la, lo, cls, tiv, location_source=src, claimed_loss_kes=claim or None,
+            o = ev.evaluate(d_cur, la, lo, cls, tiv, location_source=src_, claimed_loss_kes=claim or None,
                             radius_km=radius, k=k, tier_rp=S["tier_rp"], depth_scale=S["depth_scale"],
                             sites=S["sites"], bundle=S["bundle"], ai_kwargs=S["ai_kwargs"],
                             port_loss=S["port_loss"], label=where)
         except ValueError as e:
             right.error(str(e)); return
         st.session_state.evaluation = o
+        st.session_state.eval_from = "description" if parsed else "form"
         st.session_state.pop("sub_done", None)
-    o = st.session_state.evaluation
-
+    shown = st.session_state.get("eval_from")
+    if kind == SUB_KIND and shown not in ("submission", "description") or "evaluation" not in st.session_state:
+        right.info("Upload a broker's submission (PDF), or paste a short description. The location, building and "
+                   "insured value are read from it - every fact with the line it came from - and the submission's "
+                   "own figures are checked.")
+        return
     with right:
-        _results(st, o, d_cur, S)
+        _results(st, st.session_state.evaluation, d_cur, S)
 
 
 def _ai_explanation(st, o, S):
@@ -438,68 +550,89 @@ def _briefing(st, o):
     return cache[key]
 
 
-def _details_button(st, shown):
-    """The button at the bottom of the page that opens / closes the detailed working."""
-    _, mid, _ = st.columns([1, 2, 1])
-    if mid.button("Hide details ▴" if shown else "Show more details ▾", key="eval_details_btn",
-                  use_container_width=True):
-        st.session_state.eval_details = not shown
-        st.rerun()
+_DEC_CSS = """<style>
+.kre-dec { border: 1px solid __GRID__; border-radius: 14px; background: #fff; box-shadow: 0 2px 10px rgba(4, 29, 59, .06);
+  overflow: hidden; margin: .2rem 0 .8rem; }
+.kre-dec .act { padding: 12px 18px; border-bottom: 1px solid __GRID__; display: flex; gap: 14px; align-items: baseline;
+  flex-wrap: wrap; }
+.kre-dec .act.good { background: #EEF7EE; } .kre-dec .act.warn { background: #FFF7E6; } .kre-dec .act.bad { background: #FCEBEB; }
+.kre-dec .act .lab { font-size: .7rem; letter-spacing: .05em; text-transform: uppercase; color: #5B6470; font-weight: 700; }
+.kre-dec .act .val { font-family: Archivo, Roboto, sans-serif; font-weight: 700; font-size: 1.2rem; }
+.kre-dec .act.good .val { color: #1D6B1D; } .kre-dec .act.warn .val { color: #8A5A00; } .kre-dec .act.bad .val { color: #A11D1D; }
+.kre-dec .act .why { font-size: .85rem; color: #3A4554; flex-basis: 100%; }
+.kre-dec .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
+.kre-dec .st { padding: 12px 18px; border-right: 1px solid __GRID__; }
+.kre-dec .st:last-child { border-right: none; }
+.kre-dec .st .lab { font-size: .76rem; color: #5B6470; }
+.kre-dec .st .val { font-family: Archivo, Roboto, sans-serif; font-weight: 700; font-size: 1.45rem; color: __NAVY__;
+  line-height: 1.25; white-space: nowrap; }
+.kre-dec .st .sub { font-size: .74rem; color: #5B6470; line-height: 1.35; }
+.kre-dec .st .as { color: #8A5A00; }
+</style>""".replace("__GRID__", GRID).replace("__NAVY__", brand.NAVY)
+
+
+def _decision_html(o, b, tech):
+    """The decision strip: suggested action (rule-based) with its one-line reason, then the four numbers it rests on.
+    Assumptions are named beside the numbers they drive."""
+    import html
+    e = html.escape
+    e100 = o["events"].set_index("return_period")
+    r100 = e100.loc[100] if 100 in e100.index else o["events"].iloc[-2]
+    on_map = o["final_score"] > 0
+    stats = [("Flood risk", o["risk_band"] if on_map else "Not on map",
+              f"more flood-prone than {o['city_percentile']:.0f}% of Nairobi" if on_map else "no mapped flood risk here"),
+             ("Technical premium / yr", _k(o["aal_kes"]),
+              f"{o['rate_per_mille']:.2f} per KES 1,000 · before expenses" + (
+                  f" · vs portfolio {o['portfolio_rate']:.2f}" if tech and o.get("portfolio_rate") else "")),
+             ("Severe flood (1-in-100)", _k(r100.loss_kes),
+              f"{r100.damage_pct:.0f}% of value · ~{r100.depth_m:.1f} m water <span class='as'>(depth ASSUMED)</span>"
+              if r100.depth_m > 0 else "no damage expected"),
+             ("Confidence", o["confidence"], e(o["confidence_reasons"][0]) if o["confidence_reasons"] else "")]
+    if o.get("claim"):          # for a claim the premium is beside the point: show what was claimed instead
+        stats[1] = ("Claimed loss", _k(o["claim"]["claimed_kes"]), f"{o['claim']['claimed_ratio_pct']:.0f}% of insured value")
+    if tech and not o.get("claim") and "port_100_after" in o:
+        lab, v, sub_ = stats[2]
+        stats[2] = (lab, v, sub_ + f" · portfolio 1-in-100 +{_k(o['port_100_after'] - o['port_100_before'])}")
+    why = o["claim"]["text"] if o.get("claim") else b["headline"]
+    return _DEC_CSS + (
+        f"<div class='kre-dec'><div class='act {b['tone']}'><span class='lab'>Suggested action</span>"
+        f"<span class='val'>{e(b['stance'])}</span><span class='why'>{e(why)}</span></div><div class='stats'>"
+        + "".join(f"<div class='st'><div class='lab'>{lab}</div><div class='val'>{e(str(v))}</div>"
+                  f"<div class='sub'>{sub_}</div></div>" for lab, v, sub_ in stats) + "</div></div>")
 
 
 def _results(st, o, d_cur, S):
-    band_c = BAND_COLOUR.get(o["risk_band"], BAND_COLOUR["Low"])
-    chips = _chip(f"Flood risk: {o['risk_band']}", band_c) + " &nbsp; " + \
-        _chip(f"Confidence: {o['confidence']}", (brand.LIGHT, brand.NAVY))
-    if o.get("claim"):
-        chips += " &nbsp; " + _chip(f"Claim: {o['claim']['verdict']}", CLAIM_COLOUR[o["claim"]["colour"]])
-    st.markdown(f"#### {o['label']} · {NICE[o['housing_class']]} · KES {o['tiv_kes']:,.0f}")
-    st.markdown(chips, unsafe_allow_html=True)
-    st.write("")
     tech = S.get("tech", False)
-    e100 = o["events"].set_index("return_period")
-    r100 = e100.loc[100] if 100 in e100.index else o["events"].iloc[-2]
-    claim_card = ([dict(label="Claimed loss", value=_k(o["claim"]["claimed_kes"]), key=True,
-                        sub=f"{o['claim']['claimed_ratio_pct']:.0f}% of insured value")] if o.get("claim") else [])
-    if tech:
-        cards = [dict(label="Flood-proneness score", value=f"{o['final_score']:.2f}",
-                      sub=f"higher than {o['city_percentile']:.0f}% of Nairobi" if o["final_score"] > 0 else "not flagged"),
-                 dict(label="Technical premium / yr", value=_k(o["aal_kes"]), key=not o.get("claim"),
-                      sub=f"{o['rate_per_mille']:.2f} ‰" + (f" vs portfolio {o['portfolio_rate']:.2f} ‰" if o.get("portfolio_rate") else "")
-                      + (f" · insured {_k(o['aal_insured_kes'])} after deductible" if "aal_insured_kes" in o else "")),
-                 dict(label="Loss in a 1-in-100 flood", value=_k(r100.loss_kes),
-                      sub=f"{r100.damage_pct:.0f}% damage, ~{r100.depth_m:.1f} m water")]
-        if not o.get("claim") and "port_100_after" in o:
-            cards.append(dict(label="Portfolio 1-in-100 loss", value=_k(o["port_100_after"]),
-                              sub=f"+{_k(o['port_100_after'] - o['port_100_before'])} from writing this risk"))
-    else:
-        top = 100 - o["city_percentile"]
-        cards = [dict(label="Flood premium / yr", value=_k(o["aal_kes"]), key=not o.get("claim"),
-                      sub=["minimum, before expenses and profit", f"{o['rate_per_mille']:.2f} per KES 1,000 insured"]),
-                 dict(label="Loss in a 1-in-100 flood", value=_k(r100.loss_kes),
-                      sub=["1% chance a year", f"{r100.damage_pct:.0f}% of the building's value"]),
-                 dict(label="Compared with Nairobi", value=f"Top {max(top, 1):.0f}%" if o["final_score"] > 0 else "Not on flood map",
-                      sub=["most flood-prone", "locations in the city"] if o["final_score"] > 0 else "no mapped flood risk at the site")]
-    st.markdown(brand.kpis(cards + claim_card, min_px=160), unsafe_allow_html=True)
-    if o.get("claim"):
-        st.info(o["claim"]["text"])
-    if o.get("submission"):
-        st.markdown(_submission_html(o), unsafe_allow_html=True)
+    b = _briefing(st, o)
+    st.markdown(f"<div style='font-family:Archivo,sans-serif;font-weight:700;font-size:1.15rem;color:{brand.NAVY}'>"
+                f"{o['label']}</div><div style='color:#5B6470;font-size:.85rem;margin-bottom:.4rem'>"
+                f"{NICE[o['housing_class']]} · insured KES {o['tiv_kes']:,.0f}</div>", unsafe_allow_html=True)
+    st.markdown(_decision_html(o, b, tech), unsafe_allow_html=True)
+    sub = o.get("submission")
+    n_red = sum(x["level"] == "red" for x in sub["flags"]) if sub else 0
+    names = ([f"Broker submission · {n_red} red flags" if n_red else "Broker submission"] if sub else []) + \
+        ["Overview", "Details"]
+    tabs = st.tabs(names)
+    if sub:
+        with tabs[0]:
+            st.markdown(_submission_html(o), unsafe_allow_html=True)
+            _review_agent(st, o, d_cur, S)
+    with tabs[-2]:
+        st.markdown(brand.briefing_html(b, show_top=False), unsafe_allow_html=True)
+        _map(st, o, d_cur, tech)
+        _loss_bars(st, o)
+    with tabs[-1]:
+        _details(st, o, d_cur, S)
+
+
+def _details(st, o, d_cur, S):
+    """The full working: what was read, flags, plain words, the method tabs and the report download."""
+    tech = S.get("tech", False)
+    st.markdown(_glance(o), unsafe_allow_html=True)
     if o["flags"]:
         st.markdown(" ".join(_chip("⚑ " + f, ("#FFF1D6", "#8A5A00")).replace("padding:4px 12px", "padding:3px 10px;"
                              "font-size:.78rem;display:inline-block;margin:0 4px 6px 0") for f in o["flags"]),
                     unsafe_allow_html=True)
-    _map(st, o, d_cur, tech)
-    c_g, c_l = st.columns(2, gap="medium")
-    c_g.markdown(_glance(o), unsafe_allow_html=True)
-    with c_l:
-        _loss_bars(st, o)
-    st.markdown(brand.briefing_html(_briefing(st, o)), unsafe_allow_html=True)
-
-    # everything below is detail, behind the button at the bottom of the page
-    if not st.session_state.get("eval_details", False):
-        _details_button(st, False)
-        return
     if o.get("submission"):
         with st.expander("What was read from the submission"):
             st.dataframe(o["submission"]["facts"], hide_index=True, use_container_width=True,
@@ -577,4 +710,3 @@ def _results(st, o, d_cur, S):
 
     # ---- report download + the details toggle
     st.download_button("Download evaluation report (.md)", ev.report_markdown(o), file_name="flood_evaluation.md")
-    _details_button(st, True)

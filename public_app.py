@@ -61,18 +61,47 @@ def kes(x):
 d_ref, hs, sites, bundle = model()
 
 st.markdown(brand.page_header("How much could flooding cost your building?",
-                              "An instant, indicative estimate for buildings in Nairobi. It is not a quote or an offer "
-                              "of insurance - for cover, speak to a licensed insurer or broker."), unsafe_allow_html=True)
+                              "This is an indicative estimate from a prototype model. It uses a synthetic set of "
+                              "buildings, an estimated flood map and assumed terms. It is not a quote, a valuation or an "
+                              "offer of insurance - for cover, speak to a licensed insurer or broker.",
+                              "An instant estimate for buildings in Nairobi - three questions, no sign-up."),
+            unsafe_allow_html=True)
 
-st.markdown("##### 1 · Where is the building?")
-lat, lon, place = pin_picker.pick_location(st, "pub", hotspots=hs, default=(-1.2921, 36.8219, "Nairobi CBD"))
-st.markdown("##### 2 · What is it built from?")
-cls = st.radio("Building type", list(NICE), format_func=lambda c: f"{NICE[c]} - {HINT[c]}", index=2,
-               label_visibility="collapsed")
-st.markdown("##### 3 · What would it cost to rebuild?")
-tiv = st.number_input("Rebuilding cost (KES)", min_value=50_000, value=3_000_000, step=250_000,
-                      help="The cost to rebuild the building, not the market price of the property or land.")
-go_ = st.button("Estimate my flood cost", type="primary", use_container_width=True)
+_HERO_CSS = """<style>
+.kre-hero { border: 1px solid #E3E8EE; border-radius: 16px; background: #fff; box-shadow: 0 2px 12px rgba(4,29,59,.07);
+  overflow: hidden; margin: .4rem 0 1rem; }
+.kre-hero .main { padding: 18px 22px 14px; }
+.kre-hero .lab { font-size: .78rem; color: #5B6470; text-transform: uppercase; letter-spacing: .05em; font-weight: 700; }
+.kre-hero .big { font-family: Archivo, Roboto, sans-serif; font-weight: 700; font-size: 2.6rem; color: __NAVY__;
+  line-height: 1.1; margin: .2rem 0; }
+.kre-hero .big small { font-size: 1.1rem; color: #5B6470; font-weight: 600; }
+.kre-hero .rng { font-size: .9rem; color: #3A4554; }
+.kre-hero .row { display: grid; grid-template-columns: 1fr 1fr; border-top: 1px solid #E3E8EE; }
+.kre-hero .row > div { padding: 12px 22px; } .kre-hero .row > div + div { border-left: 1px solid #E3E8EE; }
+.kre-hero .v { font-family: Archivo, Roboto, sans-serif; font-weight: 700; font-size: 1.25rem; color: __NAVY__; }
+.kre-hero .s { font-size: .8rem; color: #5B6470; }
+.kre-hero .pill { display: inline-block; padding: 2px 10px; border-radius: 999px; font-weight: 700; font-size: .95rem; }
+@media (max-width: 560px) { .kre-hero .row { grid-template-columns: 1fr; } .kre-hero .row > div + div { border-left: none;
+  border-top: 1px solid #E3E8EE; } }
+</style>""".replace("__NAVY__", brand.NAVY)
+TONE = {"Very high": ("#F9D6D6", "#A11D1D"), "High": ("#FDE3D3", "#A8430F"), "Moderate": ("#FFF1D6", "#8A5A00"),
+        "Low": ("#E3F1E3", "#1D6B1D")}
+
+with st.container(border=True):
+    st.markdown("##### 1 · Where is the building?")
+    lat, lon, place = pin_picker.pick_location(st, "pub", hotspots=hs, default=(-1.2921, 36.8219, "Nairobi CBD"),
+                                               height=260)
+    c1, c2 = st.columns(2)
+    with c1:
+        st.markdown("##### 2 · What is it built from?")
+        cls = st.selectbox("Building type", list(NICE), format_func=lambda c: f"{NICE[c]} - {HINT[c]}", index=2,
+                           label_visibility="collapsed")
+    with c2:
+        st.markdown("##### 3 · Cost to rebuild (KES)")
+        tiv = st.number_input("Rebuilding cost (KES)", min_value=50_000, value=3_000_000, step=250_000,
+                              label_visibility="collapsed",
+                              help="The cost to rebuild the building, not the market price of the property or land.")
+    go_ = st.button("Estimate my flood cost", type="primary", use_container_width=True)
 
 if go_:
     exact = place in ("Pinned location", "Typed coordinates")
@@ -84,7 +113,6 @@ if go_:
 o = st.session_state.get("pub_result")
 
 if o is not None:
-    st.divider()
     if not o["inside_map"]:
         st.warning("This location is outside the area our flood map covers, so we can't estimate it here.")
         st.stop()
@@ -92,33 +120,37 @@ if o is not None:
     aals = [ev._event_table(o["final_score"], o["housing_class"], o["tiv_kes"], m, cm.DEPTH_SCALE_M)[1]
             for m in cm.RP_MAPPINGS.values()]
     e100 = o["events"].set_index("return_period").loc[100]
-    st.markdown(f"#### {o['label']} · {NICE[o['housing_class']]} · rebuilding cost {kes(o['tiv_kes'])}")
-    st.markdown(brand.kpis([
-        dict(label="Expected flood damage per year", value=kes(o["aal_kes"]), key=True,
-             sub=[f"likely between {kes(min(aals))} and {kes(max(aals))}", "averaged over many years"]),
-        dict(label="Damage in a severe flood", value=kes(e100.loss_kes),
-             sub=[f"a 1-in-100-year flood (1% chance a year)",
-                  f"about {e100.damage_pct:.0f}% of rebuilding cost, ~{e100.depth_m:.1f} m of water" if e100.depth_m > 0
-                  else "not expected to reach the building"]),
-        dict(label="Flood risk at this spot", value=o["risk_band"],
-             sub=[f"more flood-prone than {o['city_percentile']:.0f}%" if o["final_score"] > 0 else "not on the flood map",
-                  "of locations in Nairobi" if o["final_score"] > 0 else "for this spot"])], min_px=200),
-        unsafe_allow_html=True)
-    st.markdown(brand.briefing_html(briefing.owner_briefing(o), audience="owner"), unsafe_allow_html=True)
+    bg, fg = TONE.get(o["risk_band"], ("#ECF0F4", brand.NAVY))
+    risk = (f"<span class='pill' style='background:{bg};color:{fg}'>{o['risk_band']}</span>" if o["final_score"] > 0
+            else "<span class='pill' style='background:#E3F1E3;color:#1D6B1D'>Not on the flood map</span>")
+    st.markdown(_HERO_CSS + (
+        f"<div class='kre-hero'><div class='main'><div class='lab'>Expected flood damage · {o['label']}</div>"
+        f"<div class='big'>{kes(o['aal_kes'])} <small>a year, on average</small></div>"
+        f"<div class='rng'>Likely between <b>{kes(min(aals))}</b> and <b>{kes(max(aals))}</b> a year, depending on how "
+        f"often the big floods really come.</div></div><div class='row'>"
+        f"<div><div class='lab'>In a severe flood</div><div class='v'>{kes(e100.loss_kes)}</div><div class='s'>"
+        + (f"a 1-in-100-year flood: ~{e100.depth_m:.1f} m of water, about {e100.damage_pct:.0f}% of the rebuilding cost"
+           if e100.depth_m > 0 else "not expected to reach the building")
+        + f"</div></div><div><div class='lab'>Flood risk at this spot</div><div class='v'>{risk}</div><div class='s'>"
+        + (f"more flood-prone than {o['city_percentile']:.0f}% of Nairobi" if o["final_score"] > 0 else
+           "no mapped flood risk here")
+        + "</div></div></div></div>"), unsafe_allow_html=True)
+    st.markdown(brand.briefing_html(briefing.owner_briefing(o), audience="owner", show_top=False),
+                unsafe_allow_html=True)
 
-    ev_tbl = o["events"]
-    fig = go.Figure(go.Bar(x=ev_tbl.loss_kes / 1e3, y=[f"1-in-{r}" for r in ev_tbl.return_period], orientation="h",
-                           marker=dict(color=[brand.CRIMSON if r == 100 else brand.BLUE for r in ev_tbl.return_period],
-                                       cornerradius=4),
-                           text=[f"KES {v / 1e3:,.0f}k · {p:.0f}%" if v > 0 else "no damage"
-                                 for v, p in zip(ev_tbl.loss_kes, ev_tbl.damage_pct)], textposition="outside",
-                           hovertemplate="%{y} flood: KES %{x:,.0f}k<extra></extra>"))
-    fig.update_layout(template=brand.TEMPLATE, height=260, margin=dict(l=10, r=40, t=40, b=10),
-                      title="Damage to this building by flood size (rarer floods are deeper)",
-                      xaxis=dict(title="damage (KES thousand)", range=[0, max(ev_tbl.loss_kes.max() / 1e3 * 1.35, 1)]),
-                      yaxis=dict(autorange="reversed"))
-    st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
-
+    with st.expander("Damage by flood size"):
+        ev_tbl = o["events"]
+        fig = go.Figure(go.Bar(x=ev_tbl.loss_kes / 1e3, y=[f"1-in-{r}" for r in ev_tbl.return_period], orientation="h",
+                               marker=dict(color=[brand.CRIMSON if r == 100 else brand.BLUE for r in ev_tbl.return_period],
+                                           cornerradius=4),
+                               text=[f"KES {v / 1e3:,.0f}k · {p:.0f}%" if v > 0 else "no damage"
+                                     for v, p in zip(ev_tbl.loss_kes, ev_tbl.damage_pct)], textposition="outside",
+                               hovertemplate="%{y} flood: KES %{x:,.0f}k<extra></extra>"))
+        fig.update_layout(template=brand.TEMPLATE, height=240, margin=dict(l=10, r=40, t=10, b=10),
+                          title="",
+                          xaxis=dict(title="damage (KES thousand)", range=[0, max(ev_tbl.loss_kes.max() / 1e3 * 1.35, 1)]),
+                          yaxis=dict(autorange="reversed"))
+        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
     with st.expander("How we worked this out"):
         st.markdown("\n".join([
             f"1. **Flood map.** We read how flood-prone this spot is from a map built from terrain and rivers"

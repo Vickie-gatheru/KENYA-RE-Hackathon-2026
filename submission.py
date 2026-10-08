@@ -555,14 +555,14 @@ def value_shares(f):
     return None
 
 
-def building_events(events, cls, tiv, shares):
+def building_events(events, cls, tiv, shares, fill_m=None):
     """Event table for a multi-storey building: the ground floor takes the street depth, the basements fill once
     water reaches the street (ASSUMED), upper floors stay dry. Returns (events, aal)."""
     p = cm.VULN[cls]
     e = events.copy()
     dr_g = cm.damage_ratio(e.depth_m.to_numpy(), p["depth_factor"], p["cap"])
     dr_b = np.where(e.depth_m.to_numpy() >= BASEMENT_TRIGGER_M,
-                    cm.damage_ratio(BASEMENT_FILL_M, p["depth_factor"], p["cap"]), 0.0)
+                    cm.damage_ratio(fill_m or BASEMENT_FILL_M, p["depth_factor"], p["cap"]), 0.0)
     e["damage_pct"] = (shares["ground"] * dr_g + shares["basement"] * dr_b) * 100
     e["loss_kes"] = e.damage_pct / 100 * tiv
     aal = float(cm.aal_from_ep(e.return_period.to_numpy(float), e.loss_kes.to_numpy()))
@@ -640,7 +640,7 @@ def apply(o, f, flags, source_name=""):
                              model=f"KES {ded / 1e6:,.1f} m - the insured keeps {share:.0%} of a 1-in-"
                                    f"{int(r0.return_period)} flood loss (KES {r0.loss_kes / 1e6:,.0f} m)",
                              tone="warn" if share >= 0.5 else "good"))
-    o["submission"] = dict(source=source_name, flags=flags, compare=rows, facts=facts_table(f),
+    o["submission"] = dict(source=source_name, flags=flags, compare=rows, facts=facts_table(f), raw=f,
                            n_facts=sum(1 for k in FIELDS if k in f), rejected=f.get("rejected", []),
                            client=(f.get("client") or {}).get("value"))
     return o

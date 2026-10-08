@@ -339,5 +339,27 @@ res.append(ok(abs(oo["aal_kes"] - cm.aal_from_ep(oo["events"].return_period.to_n
               and BR.stance(oo)[0] == "Refer to a senior underwriter" and "Broker submission check" in EV.report_markdown(oo),
               "submission applied: cards use building-shape losses; 2+ red flags -> refer; report includes the check"))
 
+# ---- submission review agent (geocoder stubbed: no network)
+import review_agent as RA
+SB.geocode_place = lambda n: geo(n)
+ctx = dict(o=oo, f=fm, flags=SB.checks(fm, geocoder=geo), d=d, S=dict(signals=raw))
+rr = RA.run(ctx, None)
+tools_run = [s_["tool"] for s_ in rr["steps"]]
+res.append(ok(tools_run[0] == "price_other_location" and "basement_sensitivity" in tools_run
+              and tools_run[-1] == "broker_queries" and rr["source"] == "rules" and rr["queries"]
+              and rr["range_m"][0] <= round(oo["aal_kes"] / 1e6, 2) <= rr["range_m"][1] and "Dear broker" in rr["email"],
+              "review agent (rules): investigates the flags in order, prices the cases, drafts queries"))
+script = iter([json.dumps({"tool": "basement_sensitivity", "args": {"fill_m": 2}, "why": "test the assumption"}),
+               json.dumps({"final": {"summary": "Loss could be KES 4,321 m a year.", "queries": ["Is the basement dry?"]}})])
+ra_ai = RA.run(ctx, lambda p: next(script))
+b2 = ra_ai["steps"][0]["result"]["expected_loss_per_year_m"]
+script = iter([json.dumps({"tool": "basement_sensitivity", "args": {"fill_m": 2}, "why": "test the assumption"}),
+               json.dumps({"final": {"summary": f"With 2 m basements the loss is KES {b2} m a year.",
+                                     "queries": ["Is the basement dry?"]}})])
+ra_ok = RA.run(ctx, lambda p: next(script))
+res.append(ok(ra_ai["source"] == "rules" and ra_ok["source"] == "ai" and ra_ok["queries"] == ["Is the basement dry?"]
+              and [s_["tool"] for s_ in ra_ok["steps"]] == ["basement_sensitivity", "broker_queries"],
+              "review agent (AI): LLM picks the tools; a summary with an invented number falls back to rules"))
+
 print(f"\n{sum(res)}/{len(res)} passed")
 sys.exit(0 if all(res) else 1)

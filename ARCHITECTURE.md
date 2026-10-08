@@ -218,6 +218,10 @@ exhausted ≈1-in-107; layer expected loss KES 6.4 m/yr, technical rate on line 
 |---|---|
 | `catmodel.py` | Engine: exposure, hazard, vulnerability, ground-up loss, Monte Carlo, AAL |
 | `financial.py` | Insured (deductible/limit) and reinsured (quota share + cat XL) losses, layer metrics |
+| `public_app.py` | Public estimate page for building owners and cedants (own port): one building's indicative flood cost, no portfolio data shown, no LLM |
+| `briefing.py` | Structured evaluation briefing (headline, drivers, actions, questions, caveat): LLM-written with every number checked, or rule-based; stance always by rules |
+| `pin_picker.py` | Search a place or click the map to drop a pin (pydeck click selection on an invisible grid) |
+| `submission.py` | Reads a broker's submission PDF: each fact found as a verbatim quote (rules, then LLM for gaps; values parsed from the quote by code), rule-based consistency checks (address vs GPS, landmarks, river height, floor areas, services, basement plant, deadline), ASSUMED building-shape losses (basements flood at 5 cm street water, ~3 m deep; upper floors dry), broker-says vs model-says |
 | `brand.py`, `.streamlit/config.toml` | Kenya Re website palette and fonts (colours only, no logo); validated chart palette |
 | `extract.py` | LLM extraction + validation (provider: groq / gemini / anthropic / openai / manual paste) |
 | `geocode.py` | Place → coordinates via Nominatim (run on a laptop with internet) |

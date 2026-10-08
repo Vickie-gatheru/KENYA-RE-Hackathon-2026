@@ -395,6 +395,11 @@ def report_markdown(o):
     lines += ["", "## Nearby assessed assets", "", "| Asset | Distance (km) | Type | Mapped score | Weight |", "|---|---|---|---|---|"]
     lines += [f"| {r.loc_id} | {r.distance_km:.2f} | {r.housing_class} | {r.mapped_score:.2f} | {r.weight:.0%} |"
               for r in o["comparables"].itertuples()]
+    sub = o.get("submission")
+    if sub:
+        lines += ["", f"## Broker submission check ({sub['source']})", ""]
+        lines += [f"- **{r['topic']}.** Broker: \"{r['broker']}\" Model: {r['model']}." for r in sub["compare"]]
+        lines += [f"- [{x['level'].upper()}] **{x['title']}.** {x['detail']}" for x in sub["flags"]]
     lines += ["", "Flags: " + ("; ".join(o["flags"]) or "none"), "",
               "_Basis: synthetic portfolio; hazard is a terrain-and-river proxy (hazard_score_common only), not measured "
               "depth; JRC Africa residential damage curve; losses ground-up unless marked insured; policy terms ASSUMED._"]

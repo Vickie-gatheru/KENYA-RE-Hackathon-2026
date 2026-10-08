@@ -189,3 +189,60 @@ def kpis(items, min_px=215):
                     for it in items)
     return _KPI_CSS + (f"<div class='kre-kpis' style='grid-template-columns:repeat(auto-fit,minmax({min_px}px,1fr))'>"
                        f"{cards}</div>")
+
+
+# structured briefing card (briefing.py): stance + headline, drivers up / down, next steps, questions, caveat
+_BRIEF_CSS = """<style>
+.kre-brief { border: 1px solid __GRID__; border-radius: 14px; padding: 16px 18px 14px; background: #fff;
+  box-shadow: 0 2px 10px rgba(4, 29, 59, .06); margin: .2rem 0 1rem; }
+.kre-brief .top { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+.kre-brief .pill { padding: 4px 11px; border-radius: 999px; font-weight: 700; font-size: .8rem; }
+.kre-brief .pill.good { background: #E3F1E3; color: #1D6B1D; }
+.kre-brief .pill.warn { background: #FFF1D6; color: #8A5A00; }
+.kre-brief .pill.bad { background: #F9D6D6; color: #A11D1D; }
+.kre-brief .src { font-size: .72rem; color: #5B6470; }
+.kre-brief .hl { font-family: Archivo, Roboto, sans-serif; font-weight: 600; font-size: 1.12rem; color: __NAVY__;
+  line-height: 1.35; margin: .65rem 0 .8rem; }
+.kre-brief .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 10px; align-items: start; }
+.kre-brief .drvs { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 8px; margin-bottom: 10px; align-items: start; }
+.kre-brief details { border-radius: 10px; background: #F4F7FB; }
+.kre-brief summary { list-style: none; cursor: pointer; padding: 8px 10px; display: flex; align-items: center; gap: 8px;
+  font-size: .86rem; font-weight: 600; color: __NAVY__; }
+.kre-brief summary::-webkit-details-marker { display: none; }
+.kre-brief summary::after { content: '▾'; margin-left: auto; color: #8A94A3; font-size: .75rem; }
+.kre-brief details[open] summary::after { content: '▴'; }
+.kre-brief .ic { flex: none; width: 22px; height: 22px; border-radius: 50%; display: inline-flex; align-items: center;
+  justify-content: center; font-size: .7rem; color: #fff; }
+.kre-brief .up .ic { background: __CRIMSON__; }
+.kre-brief .down .ic { background: __BLUE__; }
+.kre-brief .drv.up { box-shadow: inset 3px 0 0 __CRIMSON__; }
+.kre-brief .drv.down { box-shadow: inset 3px 0 0 __BLUE__; }
+.kre-brief details > span, .kre-brief details > ul { display: block; font-size: .8rem; color: #3A4554; line-height: 1.4;
+  padding: 0 10px 9px 40px; margin: 0; }
+.kre-brief details > ul { padding-left: 1.6rem; }
+.kre-brief .n { background: __NAVY__; color: #fff; border-radius: 999px; font-size: .7rem; padding: 1px 7px; }
+.kre-brief li { font-size: .82rem; color: #1D2430; line-height: 1.45; margin-bottom: 3px; }
+.kre-brief .cav { font-size: .74rem; color: #5B6470; margin-top: .6rem; }
+</style>""".replace("__GRID__", GRID).replace("__NAVY__", NAVY).replace("__CRIMSON__", CRIMSON).replace("__BLUE__", BLUE)
+
+
+def briefing_html(b, audience="underwriter"):
+    """Compact card: stance + headline, then the drivers as small cards (click one for the detail) and the next steps /
+    questions folded away with a count, so the underwriter takes it in at a glance."""
+    import html as _h
+    e = _h.escape
+    order = [x for x in b["drivers"] if x["effect"] == "raises"] + [x for x in b["drivers"] if x["effect"] != "raises"]
+    drv = "".join(f"<details class='drv {'up' if x['effect'] == 'raises' else 'down'}'><summary>"
+                  f"<span class='ic'>{'▲' if x['effect'] == 'raises' else '▼'}</span>{e(x['factor'])}</summary>"
+                  f"<span>{e(x['detail'])}</span></details>" for x in order)
+    fold = lambda title, xs: (f"<details><summary>{title} <span class='n'>{len(xs)}</span></summary><ul>"
+                              + "".join(f"<li>{e(x)}</li>" for x in xs) + "</ul></details>") if xs else ""
+    src = ("AI-written · numbers checked ✓" + (f" · {b['dropped']} unsupported item(s) removed" if b.get("dropped") else "")
+           if b["source"] == "ai" else "Rule-based summary")
+    ask = "Ask the broker" if audience == "underwriter" else "Worth checking"
+    return _BRIEF_CSS + (
+        f"<div class='kre-brief'><div class='top'><span class='pill {b['tone']}'>{e(b['stance'])}</span>"
+        f"<span class='src'>{e(src)}</span></div><div class='hl'>{e(b['headline'])}</div>"
+        f"<div class='drvs'>{drv}</div>"
+        f"<div class='grid'>{fold('Next steps', b['actions'])}{fold(ask, b['questions'])}</div>"
+        f"<div class='cav'>ⓘ {e(b['caveat'])}</div></div>")

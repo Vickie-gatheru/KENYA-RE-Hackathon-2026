@@ -1,0 +1,21 @@
+{
+  "background": "mixed",
+  "feats": [
+    "proxy_score",
+    "proxy_mean_1km",
+    "proxy_max_500m",
+    "dist_river_km",
+    "dist_drain_km",
+    "road_density",
+    "informal",
+    "road_density_250m",
+    "road_density_1km",
+    "drain_density_500m",
+    "relative_lowness",
+    "wet_share_2km",
+    "dist_informal_km"
+  ],
+  "model": "logistic C=0.3",
+  "bag": false,
+  "feature_set": "extended"
+}

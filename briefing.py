@@ -101,7 +101,7 @@ def rule_briefing(o):
             actions.append("Load the rate or apply a higher deductible for flood")
         if o["confidence"] != "High":
             actions.append("Get the exact address or coordinates to firm up the estimate")
-        if o.get("tiv_within_1km", 0) > 0.05 * 6.36e9:
+        if o.get("tiv_within_1km", 0) > 0.05 * o.get("portfolio_tiv", float("inf")):
             actions.append("Check the accumulation: this area already holds a large share of the book")
         actions = actions or ["Quote on standard flood terms"]
         questions = ["Is the ground floor raised above street level?",

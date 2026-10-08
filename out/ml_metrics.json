@@ -1,5 +1,26 @@
 {
-  "model": "logistic regression",
+  "model": "logistic C=0.3",
+  "selection": {
+    "background": "mixed",
+    "feats": [
+      "proxy_score",
+      "proxy_mean_1km",
+      "proxy_max_500m",
+      "dist_river_km",
+      "dist_drain_km",
+      "road_density",
+      "informal",
+      "road_density_250m",
+      "road_density_1km",
+      "drain_density_500m",
+      "relative_lowness",
+      "wet_share_2km",
+      "dist_informal_km"
+    ],
+    "model": "logistic C=0.3",
+    "bag": false,
+    "feature_set": "extended"
+  },
   "features": [
     "proxy_score",
     "proxy_mean_1km",
@@ -7,30 +28,30 @@
     "dist_river_km",
     "dist_drain_km",
     "road_density",
-    "informal"
+    "informal",
+    "road_density_250m",
+    "road_density_1km",
+    "drain_density_500m",
+    "relative_lowness",
+    "wet_share_2km",
+    "dist_informal_km"
   ],
   "positives": 51,
   "background": 510,
   "spatial_cv": {
-    "logistic regression": {
-      "roc_auc": 0.9528258362168397,
-      "pr_auc": 0.6646625561273481,
-      "base_rate": 0.09090909090909091,
-      "folds": 5
-    },
-    "gradient boosting": {
-      "roc_auc": 0.9460015378700501,
-      "pr_auc": 0.5752038558933632,
+    "logistic C=0.3": {
+      "roc_auc": 0.8929257977700884,
+      "pr_auc": 0.3535089865371542,
       "base_rate": 0.09090909090909091,
       "folds": 5
     }
   },
   "held_out_hotspot_test": {
-    "auc_ml": 0.9114354800660532,
+    "auc_ml": 0.9130941849492804,
     "auc_proxy": 0.536240858693088,
-    "hotspots_in_top_10pct_ml": 18,
+    "hotspots_in_top_10pct_ml": 19,
     "hotspots_in_top_10pct_proxy": 1,
-    "hotspots_in_top_20pct_ml": 21,
+    "hotspots_in_top_20pct_ml": 22,
     "hotspots_in_top_20pct_proxy": 5,
     "auc_single_feature": {
       "proxy_score": 0.5362,
@@ -39,13 +60,21 @@
       "dist_river_km": 0.7142,
       "dist_drain_km": 0.826,
       "road_density": 0.8947,
-      "informal": 0.5
+      "informal": 0.5,
+      "road_density_250m": 0.8688,
+      "road_density_1km": 0.9078,
+      "drain_density_500m": 0.5105,
+      "relative_lowness": 0.7139,
+      "wet_share_2km": 0.6725,
+      "dist_informal_km": 0.666
     },
     "built_up_only": {
-      "auc_ml": 0.8325043936731108,
+      "auc_ml": 0.846154071470416,
       "auc_proxy": 0.5282952548330404,
       "auc_road_density": 0.7908919156414764,
-      "n_city_points": 14225
+      "n_city_points": 14225,
+      "best_single_feature": "road_density_1km",
+      "auc_best_single_feature": 0.8171
     }
   },
   "buffer_test": [
@@ -53,26 +82,32 @@
       "buffer_km": 1.0,
       "hotspots_with_training_place_within": 15,
       "positives": 35,
-      "auc_ml": 0.9112,
+      "auc_ml": 0.92,
       "auc_proxy": 0.5362,
-      "hotspots_in_top_10pct_ml": 19
+      "hotspots_in_top_10pct_ml": 18
     },
     {
       "buffer_km": 2.0,
       "hotspots_with_training_place_within": 21,
       "positives": 18,
-      "auc_ml": 0.9172,
+      "auc_ml": 0.9133,
       "auc_proxy": 0.5362,
-      "hotspots_in_top_10pct_ml": 19
+      "hotspots_in_top_10pct_ml": 17
     }
   ],
   "global_importance_shap": {
-    "built-up / paved surface density": 1.3967,
-    "distance to nearest river": 0.8049,
-    "distance to nearest mapped drain": 0.7627,
-    "terrain/river score at the spot": 0.3787,
-    "wet ground within 500 m": 0.0715,
-    "how low-lying the neighbourhood is (1 km)": 0.0099,
+    "distance to nearest river": 0.7138,
+    "built-up density (1 km)": 0.6435,
+    "distance to nearest mapped drain": 0.5603,
+    "built-up / paved surface density": 0.3406,
+    "share of flood-prone ground within 2 km": 0.3321,
+    "how low-lying the neighbourhood is (1 km)": 0.2317,
+    "terrain/river score at the spot": 0.2157,
+    "built-up density (250 m)": 0.1395,
+    "distance to an informal settlement": 0.0889,
+    "lower than the surrounding area": 0.041,
+    "mapped drains within 500 m": 0.018,
+    "wet ground within 500 m": 0.0128,
     "inside an informal settlement": 0.0
   }
 }

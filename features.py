@@ -9,6 +9,12 @@ Added when data/osm/*.json exist (run fetch_osm.py on a laptop):
   dist_drain_km      distance to nearest mapped drain/ditch (far = unserved by mapped drainage)
   road_density       road vertices within 500 m - proxy for built-up, paved, fast-runoff surfaces
   informal           1 if inside an area mapped as an informal settlement
+Extended set (EXTENDED - offered to model selection in ml_select.py; still only the 'common' tier and OSM):
+  road_density_250m / road_density_1km   built-up density at a finer and a coarser scale
+  drain_density_500m                     mapped drain vertices within 500 m (drainage provision)
+  relative_lowness                       score at the spot minus its 1 km average (a local hollow scores > 0)
+  wet_share_2km                          share of ground within ~2 km that the map scores above zero
+  dist_informal_km                       distance to the nearest mapped informal settlement
 """
 import json, os
 from functools import lru_cache
@@ -30,7 +36,15 @@ LABELS = {  # plain-English names for explanations
     "dist_drain_km": "distance to nearest mapped drain",
     "road_density": "built-up / paved surface density",
     "informal": "inside an informal settlement",
+    "road_density_250m": "built-up density (250 m)",
+    "road_density_1km": "built-up density (1 km)",
+    "drain_density_500m": "mapped drains within 500 m",
+    "relative_lowness": "lower than the surrounding area",
+    "wet_share_2km": "share of flood-prone ground within 2 km",
+    "dist_informal_km": "distance to an informal settlement",
 }
+EXTENDED = ["road_density_250m", "road_density_1km", "drain_density_500m", "relative_lowness", "wet_share_2km",
+            "dist_informal_km"]
 
 
 def _xy(lat, lon):
@@ -44,7 +58,9 @@ def _raster_layers():
     cell_km = abs(tr.e) * KM_LAT                        # ~0.031 km
     mean1k = ndimage.uniform_filter(g, size=int(round(1.0 / cell_km)) | 1, mode="nearest")
     max500 = ndimage.maximum_filter(g, size=int(round(0.5 / cell_km)) | 1, mode="nearest")
-    return {"proxy_score": g, "proxy_mean_1km": mean1k, "proxy_max_500m": max500}, tr
+    wet2k = ndimage.uniform_filter((g > 0).astype("float32"), size=int(round(2.0 / cell_km)) | 1, mode="nearest")
+    return {"proxy_score": g, "proxy_mean_1km": mean1k, "proxy_max_500m": max500, "relative_lowness": g - mean1k,
+            "wet_share_2km": wet2k}, tr
 
 
 def _sample_grid(arr, tr, lat, lon):
@@ -64,6 +80,9 @@ def _osm():
             if d.get("n", 0) > 0:
                 out[name] = d["data"]
     trees = {k: cKDTree(_xy(*np.array(v).T)) for k, v in out.items() if k != "informal"}
+    if "informal" in out:            # polygon vertices, for distance to the nearest informal settlement
+        verts = np.concatenate([np.array(r) for r in out["informal"] if len(r) >= 3])
+        trees["informal_vertices"] = cKDTree(_xy(verts[:, 0], verts[:, 1]))
     polys = []
     if "informal" in out:
         from matplotlib.path import Path
@@ -84,6 +103,14 @@ def available_features():
     return f
 
 
+def extended_features():
+    """The base features plus EXTENDED, where their data exist."""
+    trees, polys = _osm()
+    need = {"road_density_250m": "roads", "road_density_1km": "roads", "drain_density_500m": "drains",
+            "dist_informal_km": "informal_vertices"}
+    return available_features() + [f for f in EXTENDED if f not in need or need[f] in trees]
+
+
 def compute(lat, lon, feats=None):
     """Feature matrix (n, k) and the feature names, for points given in degrees."""
     feats = feats or available_features()
@@ -99,8 +126,13 @@ def compute(lat, lon, feats=None):
             cols.append(np.minimum(trees["rivers"].query(xy)[0], 5.0))
         elif f == "dist_drain_km":
             cols.append(np.minimum(trees["drains"].query(xy)[0], 5.0))
-        elif f == "road_density":
-            cols.append(np.asarray(trees["roads"].query_ball_point(xy, r=0.5, return_length=True), float))
+        elif f in ("road_density", "road_density_250m", "road_density_1km"):
+            r = {"road_density": 0.5, "road_density_250m": 0.25, "road_density_1km": 1.0}[f]
+            cols.append(np.asarray(trees["roads"].query_ball_point(xy, r=r, return_length=True), float))
+        elif f == "drain_density_500m":
+            cols.append(np.asarray(trees["drains"].query_ball_point(xy, r=0.5, return_length=True), float))
+        elif f == "dist_informal_km":
+            cols.append(np.minimum(trees["informal_vertices"].query(xy)[0], 5.0))
         elif f == "informal":
             inside = np.zeros(len(lat))
             pts = np.c_[lon, lat]
@@ -109,6 +141,9 @@ def compute(lat, lon, feats=None):
                 if m.any():
                     inside[m] = path.contains_points(pts[m]).astype(float)
             cols.append(inside)
+        else:      # never skip silently: a model trained on a feature this code can't compute must fail clearly
+            raise ValueError(f"Unknown feature '{f}' - the ML model was trained with a newer features.py than the "
+                             "one loaded. Restart Streamlit (or re-run ml_hazard.py) so code and model match.")
     return np.column_stack(cols), feats
 
 

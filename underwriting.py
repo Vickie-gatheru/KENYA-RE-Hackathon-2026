@@ -3,7 +3,7 @@
 Pricing here is the TECHNICAL (pure) premium = modelled average annual loss, ground-up, before expenses,
 profit, deductibles or limits. It is a floor for pricing, not a price.
 """
-import json, re
+import json, os, re
 import numpy as np
 import pandas as pd
 
@@ -54,6 +54,12 @@ def zones(df, landmarks, step_km=2.0):
 
 # ------------------------------------------------------------------ quoting
 def class_defaults(portfolio):
+    """Typical cost per m² and floor area per building type, for estimating a missing value. An imported book often
+    has no floor areas or costs: then the starter portfolio's medians are used (they describe Nairobi buildings)."""
+    if not {"cost_per_m2_kes", "floor_area_m2"} <= set(portfolio.columns) or portfolio.cost_per_m2_kes.isna().all():
+        import catmodel as cm
+        portfolio = cm.load_exposure(os.path.join(os.path.dirname(os.path.abspath(__file__)), "data",
+                                                  "exposure_nairobi_with_hazard.csv"))
     g = portfolio.groupby("housing_class")
     return pd.DataFrame({"cost_per_m2": g.cost_per_m2_kes.median(), "floor_area": g.floor_area_m2.median()})
 

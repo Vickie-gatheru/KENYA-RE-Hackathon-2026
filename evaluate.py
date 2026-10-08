@@ -226,6 +226,7 @@ def evaluate(portfolio, lat, lon, housing_class, tiv_kes, location_source="coord
                    port_aal_after=float(cm.aal_from_ep(rps, new_port)), port_aal_before=port_aal)
     near1 = dist <= 1.0
     out["tiv_within_1km"] = float(portfolio.tiv_kes.to_numpy()[near1].sum())
+    out["portfolio_tiv"] = float(portfolio.tiv_kes.sum())
     out["buildings_within_1km"] = int(near1.sum())
     rate_txt = (f"{out['rate_per_mille']:.2f} per mille, against {port_rate:.2f} for the whole portfolio"
                 if port_rate is not None else f"{out['rate_per_mille']:.2f} per mille")
@@ -371,7 +372,7 @@ def _flags(o):
         f.append("Flood reports or the flood model point to drainage flooding here")
     if o.get("portfolio_rate") and o["rate_per_mille"] > 2 * o["portfolio_rate"]:
         f.append("Rate more than twice the portfolio average")
-    if o["tiv_within_1km"] > 0.05 * 6.36e9:
+    if o["tiv_within_1km"] > 0.05 * o.get("portfolio_tiv", 0):
         f.append("Adds to an existing concentration (>5% of portfolio value within 1 km)")
     return f
 

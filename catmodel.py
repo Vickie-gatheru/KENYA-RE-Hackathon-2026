@@ -72,9 +72,28 @@ def load_exposure(path):
     return d
 
 
+def check_exposure(d):
+    """Refuse a portfolio with missing or impossible values rather than letting NaN flow silently into the losses
+    (one blank row would otherwise turn the whole EP curve into NaN). importer.prepare() removes such rows with
+    reasons before they get here."""
+    need = ["lat", "lon", "housing_class", "tiv_kes", "hazard_score_common"]
+    missing = [c for c in need if c not in d.columns]
+    if missing:
+        raise ValueError(f"Portfolio is missing columns: {', '.join(missing)}")
+    bad = {c: int(d[c].isna().sum()) for c in need if d[c].isna().any()}
+    bad.update({"tiv_kes <= 0": int((d.tiv_kes <= 0).sum())} if (d.tiv_kes <= 0).any() else {})
+    unknown = sorted(set(d.housing_class) - set(VULN))
+    if unknown:
+        bad["unknown building type"] = f"{len(unknown)} ({', '.join(map(str, unknown[:3]))})"
+    if bad:
+        raise ValueError("Portfolio has unusable rows - " + ", ".join(f"{k}: {v}" for k, v in bad.items())
+                         + ". Load it through importer.prepare(), which removes them and says why.")
+
+
 def hazard_scores(d, tier_rp=None):
     """(n_buildings, n_events) scores, columns ordered by ascending return period.
     Built ONLY from d['hazard_score_common'] (other hazard_score_* columns are ignored)."""
+    check_exposure(d)
     tier_rp = tier_rp or TIER_RP
     tiers = sorted(TIERS, key=lambda t: tier_rp[t])
     rps = np.array([tier_rp[t] for t in tiers])

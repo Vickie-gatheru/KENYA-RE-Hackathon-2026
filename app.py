@@ -70,6 +70,78 @@ def kes(x, unit="m"):
 _sp = os.path.join(DATA, "signals.csv")
 d, hs, raw = load(os.path.getmtime(_sp) if os.path.exists(_sp) else 0)
 sites = ai.consolidate(raw) if raw is not None else None
+_custom = st.session_state.get("custom_portfolio")       # a portfolio loaded on the Portfolio page replaces the starter
+if _custom is not None:
+    d = _custom["d"]
+BOOK = _custom["name"] if _custom else "SYNTHETIC starter portfolio"
+
+
+def portfolio_loader():
+    """Load another insurer's building list: guess the columns, review the building-type mapping, reject unusable
+    rows with reasons (importer.py). The loaded book then drives every page; one click returns to the starter."""
+    import importer as im
+    with st.expander("📂 Load a different portfolio (CSV or Excel)", expanded=False):
+        if _custom is not None:
+            st.success(f"Using **{_custom['name']}** - " + im.summary_text(_custom["report"]))
+            rj = _custom["report"]["rejected"]
+            c1, c2 = st.columns(2)
+            if len(rj):
+                c1.download_button(f"Download the {len(rj)} rejected rows", rj.to_csv(index=False),
+                                   file_name="rejected_rows.csv", use_container_width=True)
+            if c2.button("Back to the starter portfolio", use_container_width=True):
+                for k in ("custom_portfolio", "evaluation", "reviews", "sub_done", "eval_from"):
+                    st.session_state.pop(k, None)
+                st.rerun()
+            st.divider()
+        up = st.file_uploader("Building list", type=["csv", "xlsx", "xls"], label_visibility="collapsed",
+                              help="One row per building: location (latitude, longitude), building type and insured "
+                                   "value. Column names are matched automatically.")
+        if up is None:
+            st.caption("One row per building, with latitude, longitude, building type and insured value. Any column "
+                       "names - you confirm the match. Rows that can't be used are listed with the reason.")
+            return
+        try:
+            df = im.read_table(up.getvalue(), up.name)
+        except Exception as e:
+            st.error(f"Could not read the file: {e}")
+            return
+        guess = im.guess_columns(df)
+        st.markdown(f"**1 · Match the columns** ({len(df):,} rows)")
+        opts = ["-"] + list(df.columns)
+        colmap, cols = {}, st.columns(4)
+        for i, (f, (desc, _, req)) in enumerate(im.FIELDS.items()):
+            v = cols[i % 4].selectbox(desc + (" *" if req else ""), opts,
+                                      index=opts.index(guess[f]) if guess.get(f) in opts else 0, key=f"imp_col_{f}")
+            colmap[f] = None if v == "-" else v
+        need = [im.FIELDS[f][0] for f, (_, _, req) in im.FIELDS.items() if req and not colmap[f]]
+        if need:
+            st.warning("Choose the column for: " + ", ".join(need))
+            return
+        st.markdown("**2 · Check the building types** (change any the model got wrong)")
+        ct = im.map_classes(df[colmap["housing_class"]])
+        nice = {"informal_iron_sheet": "Informal (iron sheet)", "semi_permanent": "Semi-permanent",
+                "permanent_masonry": "Permanent masonry", "concrete_rcc": "Reinforced concrete"}
+        ct["model type"] = ct["model type"].map(nice)
+        ed = st.data_editor(ct, hide_index=True, use_container_width=True, disabled=["building type in file", "rows"],
+                            column_config={"model type": st.column_config.SelectboxColumn(
+                                options=list(nice.values()), help="Blank = not recognised")}, key="imp_classes")
+        default = st.selectbox("Rows whose type is still blank", ["Reject them"] + list(nice.values()),
+                               help="Choosing a type here is an ASSUMPTION for every unrecognised row.")
+        inv = {v: k for k, v in nice.items()}
+        if st.button("Use this portfolio", type="primary"):
+            try:
+                over = {t: inv.get(m) for t, m in zip(ed["building type in file"], ed["model type"]) if isinstance(m, str)}
+                d_new, rep = im.prepare(df, colmap, over, inv.get(default))
+            except ValueError as e:
+                st.error(str(e))
+                return
+            if not len(d_new):
+                st.error("No usable rows: " + im.summary_text(rep))
+                return
+            st.session_state.custom_portfolio = dict(d=d_new, name=up.name, report=rep)
+            for k in ("evaluation", "reviews", "sub_done", "eval_from"):
+                st.session_state.pop(k, None)
+            st.rerun()
 
 
 @st.cache_resource
@@ -144,9 +216,9 @@ _mp = ml.MODEL_PATH
 bundle = load_ml(os.path.getmtime(_mp) if os.path.exists(_mp) else 0)
 
 # ================================================================== sidebar
-UW_PAGES = ["Evaluate a risk or claim", "Portfolio overview", "Accumulation", "Insurance & reinsurance", "Ask the assistant"]
+UW_PAGES = ["Portfolio overview", "Evaluate a risk or claim", "Accumulation", "Insurance & reinsurance", "Ask the assistant"]
 TECH_PAGES = ["AI drainage evidence", "ML flood model", "Sensitivity & assumptions"]
-NAV_LABEL = {"Evaluate a risk or claim": "Evaluate", "Portfolio overview": "Portfolio",
+NAV_LABEL = {"Evaluate a risk or claim": "Evaluate", "Portfolio overview": "Flood briefing",
              "Insurance & reinsurance": "Reinsurance", "Ask the assistant": "Assistant",
              "AI drainage evidence": "AI flood evidence", "Sensitivity & assumptions": "Assumptions"}
 PAGE_ICON = {"Evaluate a risk or claim": "fact_check", "Portfolio overview": "space_dashboard",
@@ -170,7 +242,7 @@ def _page_stub():
 
 
 PAGES = {p: st.Page(_page_stub, title=NAV_LABEL.get(p, p), url_path=URL[p], icon=f":material/{PAGE_ICON[p]}:",
-                    default=(p == UW_PAGES[0])) for p in UW_PAGES + (TECH_PAGES if tech else [])}
+                    default=(p == "Portfolio overview")) for p in UW_PAGES + (TECH_PAGES if tech else [])}
 _pg = st.navigation(list(PAGES.values()), position="hidden")
 page = next(p for p, v in PAGES.items() if v.url_path == _pg.url_path)
 with nav:
@@ -247,8 +319,9 @@ else:
 if page == "Ask the assistant":
     st.caption("Prototype · synthetic portfolio · estimated flood map · assumed terms")
 else:
-    INTRO = {"Evaluate a risk or claim": "Price a new risk, check a flood claim, or review a broker's submission."}
-    st.markdown(brand.page_header(page, _labels, INTRO.get(page)), unsafe_allow_html=True)
+    INTRO = {"Portfolio overview": "The Nairobi flood-loss picture: portfolio exposure, severe-event losses, uncertainty and the AI layer's measured impact.",
+             "Evaluate a risk or claim": "Price a new risk, check a flood claim, or review a broker's submission."}
+    st.markdown(brand.page_header(NAV_LABEL.get(page, page), _labels, INTRO.get(page)), unsafe_allow_html=True)
 loss_cur = cur["loss"]
 
 # ================================================================== 0. evaluate a risk or claim
@@ -261,11 +334,12 @@ if page == 'Evaluate a risk or claim':
 
 # ================================================================== 1. portfolio overview
 if page == 'Portfolio overview':
+    portfolio_loader()
     r95 = lambda arr: kes_range(pct(arr, 5), pct(arr, 95))
     flooded = f"{int(cur['affected'][j100])} of {len(d)} buildings flooded"
-    cards = [dict(label="Total insured value", value=kes(tiv, "bn"), sub=[f"{len(d)} buildings", "SYNTHETIC portfolio"]),
-             dict(label="Premium per year (AAL)", value=kes(cur["aal"]),
-                  sub=[f"rate {cur['aal'] / tiv * 1000:.2f} ‰", f"range {r95(cur['aal_sims_rp'])}"]),
+    cards = [dict(label="Total insured value", value=kes(tiv, "bn"), sub=[f"{len(d)} buildings", BOOK]),
+             dict(label="Expected loss per year (AAL)", value=kes(cur["aal"]),
+                  sub=[f"technical rate {cur['aal'] / tiv * 1000:.2f} ‰", f"range {r95(cur['aal_sims_rp'])}"]),
              dict(label=f"1-in-{rps[j100]} flood loss", value=kes(cur["port"][j100]), key=True,
                   sub=[f"1% chance a year · {flooded}", f"range {r95(cur['sims_rp'][:, j100])}"]),
              dict(label=f"1-in-{rps[jtop]} flood loss", value=kes(cur["port"][jtop]),
@@ -273,13 +347,40 @@ if page == 'Portfolio overview':
     if use_ai and tech:
         cards.append(dict(label="County flood hotspots detected", value=f"{int(rec.ai_flagged.sum())} / 24",
                           sub=[f"map alone {int(rec.base_flagged.sum())} / 24", f"{fp.get('pct_city_area', 0):.1f}% of map raised"]))
+    st.markdown("### Portfolio snapshot")
     st.markdown(brand.kpis(cards), unsafe_allow_html=True)
-    st.caption("Technical premium = modelled average annual loss: the pure cost of flood, before expenses and profit. "
-               + (f"Ranges are the 5th–95th percentile of the Monte Carlo, which varies damage, depth and which years each "
-                  f"map tier represents (the biggest assumption; weights on the Sensitivity page). Without that last one the "
-                  f"AAL range would be {kes(pct(cur['aal_sims'], 5))}–{kes(pct(cur['aal_sims'], 95))}." if tech else
-                  "Ranges show how uncertain each figure is (5th–95th percentile), including how often each flood "
-                  "size really happens - the biggest uncertainty in the model."))
+    range_note = (f"Ranges are the 5th–95th percentile of the Monte Carlo, which varies damage, depth and which years "
+                  f"each map tier represents. Without return-period uncertainty the AAL range would be "
+                  f"{kes(pct(cur['aal_sims'], 5))}–{kes(pct(cur['aal_sims'], 95))}." if tech else
+                  "Ranges show Monte Carlo uncertainty in damage, depth and the assumed frequency of each flood size.")
+    st.markdown("""<style>
+.kre-briefing-note { display: grid; grid-template-columns: 175px minmax(0, 1fr); gap: 14px; align-items: start;
+  margin: .55rem 0 1.5rem; padding: 14px 18px; background: #FFFFFF; border-left: 3px solid #B97E00;
+  color: #3A4554; line-height: 1.5; }
+.kre-briefing-note strong { color: #041D3B; font-size: .82rem; }
+.kre-briefing-section { margin: 1.55rem 0 .65rem; padding-bottom: .45rem; border-bottom: 1px solid #D5DCE4; }
+.kre-briefing-section h3 { margin: 0; }
+@media (max-width: 700px) { .kre-briefing-note { grid-template-columns: 1fr; gap: 4px; padding: 12px 14px; } }
+</style>""" +
+                f"<div class='kre-briefing-note'><strong>How to read these numbers</strong><span>Technical premium is "
+                f"modelled average annual loss, before expenses and profit. {range_note}</span></div>",
+                unsafe_allow_html=True)
+
+    if use_ai:
+        st.markdown("<div class='kre-briefing-section'><h3>AI impact and validation</h3></div>",
+                    unsafe_allow_html=True)
+        proxy_loss, ai_loss = float(base["port"][j100]), float(cur["port"][j100])
+        delta_pct = (ai_loss / proxy_loss - 1) * 100 if proxy_loss else 0
+        impact, validation, footprint = st.columns([2.3, 1, 1], gap="large", vertical_alignment="center")
+        impact.markdown("**AI impact on the 1-in-100 loss**")
+        impact.markdown(f"{kes(proxy_loss)} proxy-only → **{kes(ai_loss)} with AI**")
+        impact.caption(f"{src} · change {delta_pct:+.0f}% · held-out validation below")
+        validation.metric("Hotspots detected", f"{int(rec.ai_flagged.sum())} / 24",
+                  f"proxy baseline: {int(rec.base_flagged.sum())} / 24")
+        footprint.metric("Buildings uplifted", f"{fp.get('pct_buildings', 0):.0f}%",
+                 f"{fp.get('pct_tiv', 0):.0f}% of insured value")
+    else:
+        st.info("AI hazard layer is off. The results below use the terrain-and-river proxy only.")
 
     fig = go.Figure()
     for name, r, c in ([("Proxy only", base, BLUE)] + ([("With AI hazard layer", cur, ACCENT)] if use_ai else [])
@@ -300,14 +401,14 @@ if page == 'Portfolio overview':
     fig.update_layout(template=brand.TEMPLATE, height=380, margin=dict(l=10, r=10, t=56, b=10), hovermode="x unified",
                       title=dict(text="How big could a flood loss be? (shaded: 5–95% range)", font=dict(size=15)),
                       legend=dict(orientation="h", y=1.02, x=1, xanchor="right", yanchor="bottom"))
-    st.plotly_chart(fig, use_container_width=True)
-    st.caption(f"Read it as: in any year there is a {100 / rps[j100]:.0f}% chance this portfolio loses more than "
-               f"{kes(cur['port'][j100])} to flooding - the figure to budget for at the 1-in-{rps[j100]} level. "
-               "**ASSUMED:** the five flood-map tiers have no years attached, so the model treats them as the "
-               + ", ".join(f"1-in-{tier_rp[t]}" for t in sorted(tier_rp, key=tier_rp.get))
-               + "-year floods (the widest map = the rarest flood).")
-    t_type, t_risks, t_memo = st.tabs(["By building type", "Highest-cost risks", "AI portfolio memo"])
-    with t_type:
+    st.markdown("<div class='kre-briefing-section'><h3>Loss profile and construction mix</h3></div>",
+                unsafe_allow_html=True)
+    curve_col, type_col = st.columns([1.55, 1], gap="large")
+    with curve_col:
+        st.plotly_chart(fig, use_container_width=True)
+        st.caption(f"EP-style loss curve: the 1-in-{rps[j100]} figure is {kes(cur['port'][j100])}. Shading is the 5th–95th percentile. "
+                   "Return periods are assumed for five proxy tiers, not calibrated flood recurrence; tail values are lower bounds.")
+    with type_col:
         rt = uw.rate_table(d_cur, "housing_class", rps, loss_cur, j100).sort_values("rate_per_mille")
         port_rate = cur["aal"] / tiv * 1000
         fb = go.Figure(go.Bar(x=rt.rate_per_mille, y=rt.housing_class.map(evaluate_page.NICE), orientation="h",
@@ -317,8 +418,9 @@ if page == 'Portfolio overview':
         fb.add_vline(x=port_rate, line=dict(color=MUTED, dash="dot"),
                      annotation_text=f"portfolio {port_rate:.2f} ‰", annotation_position="top")
         fb.update_layout(template=brand.TEMPLATE, height=280, margin=dict(l=10, r=60, t=40, b=10),
-                         title="Technical flood rate by building type (KES per 1,000 insured)", xaxis_title="per mille")
+                         title="Technical rate by building type", xaxis_title="KES per 1,000 insured")
         st.plotly_chart(fb, use_container_width=True)
+        st.caption("A flat rate can undercharge more vulnerable construction types. Technical rates are a floor before expenses and profit.")
         if tech:
             st.dataframe(rt.rename(columns={"housing_class": "building type", "insured_kes": "insured (KES)",
                                             "technical_premium_kes": "technical premium (KES)",
@@ -326,8 +428,7 @@ if page == 'Portfolio overview':
                          .style.format({"insured (KES)": "{:,.0f}", "technical premium (KES)": "{:,.0f}",
                                         f"1-in-{rps[j100]} loss (KES)": "{:,.0f}", "rate ‰": "{:.2f}"}),
                          hide_index=True, use_container_width=True)
-        st.caption("A flat rate across the book would undercharge informal and masonry buildings and overcharge concrete. "
-                   "The technical rate is a floor: add expense and profit loads on top.")
+    t_risks, t_memo = st.tabs(["Highest-cost risks", "AI portfolio memo"])
     with t_risks:
         st.caption("The ten buildings with the highest expected flood cost per year.")
         b = d_cur.assign(aal=uw.building_aal(rps, loss_cur))

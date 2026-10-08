@@ -25,6 +25,14 @@ MAX_STEPS = 6
 
 def _m(x):
     return round(float(x) / 1e6, 2)
+def money_m(value):
+    """Format a value stored in KES millions without rounding sub-million losses to zero."""
+    value = float(value)
+    if abs(value) >= 1:
+        return f"KES {value:,.1f} m"
+    if abs(value) >= 0.01:
+        return f"KES {value * 1000:,.0f} k"
+    return f"KES {value * 1e6:,.0f}"
 
 
 def _price(ctx, lat, lon, label, ai=True):
@@ -81,12 +89,32 @@ def without_ai_layers(ctx):
     return r
 
 
+def depth_sensitivity(ctx):
+    """Re-price at shallower and deeper score-to-depth scales around the current assumption."""
+    o, settings = ctx["o"], ctx["S"]
+    center = float(settings.get("depth_scale") or cm.DEPTH_SCALE_M)
+    low, high = max(2.0, center - 1.0), min(6.0, center + 1.0)
+    mapping = settings.get("tier_rp") or cm.TIER_RP
+    cases = {}
+    for scale in (low, center, high):
+        events, aal = ev._event_table(o["final_score"], o["housing_class"], o["tiv_kes"], mapping, scale)
+        r100 = events.set_index("return_period").loc[100]
+        cases[scale] = dict(expected_loss_per_year_m=_m(aal), loss_1_in_100_m=_m(r100.loss_kes))
+    return dict(depth_low_m=low, depth_as_assumed_m=center, depth_high_m=high,
+                low=cases[low], as_assumed=cases[center], high=cases[high])
+
+
 def flood_reports_near(ctx, top=3):
     """Flood reports (exact quotes from news and research) closest to the site."""
     o, raw = ctx["o"], ctx["S"].get("signals")
+    case_type = "claim" if o.get("claim") else "submission" if o.get("submission") else "risk"
+    flood_claims = ctx.get("f", {}).get("flood_claims", [])
+    against_no_history = bool(o.get("submission") and any(re.search(r"no flood|minimal", str(c), re.I)
+                                                           for c in flood_claims))
     ev_ = o.get("ai_evidence")
     if ev_ is None or not len(ev_):
-        return {"reports": [], "note": "no flood report within reach of this site"}
+        return {"reports": [], "note": "no flood report within reach of this site",
+                "case_type": case_type, "against_no_history": against_no_history}
     out, seen = [], set()
     for r in ev_.itertuples():
         if r.place_name.lower() in seen:
@@ -100,13 +128,25 @@ def flood_reports_near(ctx, top=3):
         out.append(item)
         if len(out) >= int(top):
             break
-    return {"reports": out}
+    return {"reports": out, "case_type": case_type, "against_no_history": against_no_history}
 
 
 def broker_queries(ctx):
     """The questions the submission checks raise, most serious first (for the draft to the broker)."""
-    fl = sorted(ctx["flags"], key=lambda x: ["red", "amber", "info"].index(x["level"]))
-    return {"queries": [x["ask"] for x in fl if x.get("ask")],
+    fl = sorted(ctx.get("flags", []), key=lambda x: ["red", "amber", "info"].index(x["level"]))
+    queries = [x["ask"] for x in fl if x.get("ask")]
+    if not fl:
+        o = ctx["o"]
+        if o.get("claim"):
+            queries = ["Please share the event date, photographs and a repair estimate for the claimed damage.",
+                       "Was water observed inside the building, and what was its approximate depth and duration?"]
+        else:
+            if o.get("location_source") != "coordinates":
+                queries.append("Please confirm the exact building coordinates or plot pin; the current place name is an area centre.")
+            queries.append("Has this building flooded before? If so, please share dates, water depths and any repairs.")
+            if o.get("shares") and o["shares"].get("basement", 0) > 0:
+                queries.append("Please confirm basement flood protection, pump capacity and any previous water ingress.")
+    return {"queries": queries,
             "issues": [f"{x['title']}: {x['detail']}" for x in fl if x["level"] != "info"][:8]}
 
 
@@ -116,11 +156,13 @@ TOOLS = {
     "basement_sensitivity": (basement_sensitivity, "re-price with basements flooding to a different depth",
                              {"fill_m": "depth in metres, e.g. 1.5"}),
     "without_ai_layers": (without_ai_layers, "price using only the terrain-and-river flood map", {}),
+    "depth_sensitivity": (depth_sensitivity, "re-price with shallower and deeper flood depths", {}),
     "flood_reports_near": (flood_reports_near, "flood reports with exact quotes near the site", {"top": "how many"}),
     "broker_queries": (broker_queries, "questions raised by the submission checks", {}),
 }
 LABELS = {"price_other_location": "Priced the other location", "basement_sensitivity": "Tested the basement assumption",
-          "without_ai_layers": "Measured the AI layers' effect", "flood_reports_near": "Pulled nearby flood reports",
+          "without_ai_layers": "Measured the AI layers' effect", "depth_sensitivity": "Tested depth uncertainty",
+          "flood_reports_near": "Pulled nearby flood reports",
           "broker_queries": "Collected questions for the broker"}
 
 
@@ -148,6 +190,17 @@ def rule_plan(ctx):
     return steps[:MAX_STEPS]
 
 
+def case_plan(ctx):
+    """Default bounded review for a proposal or claim without broker-submission flags."""
+    o = ctx["o"]
+    steps = [("depth_sensitivity", {}, "Test how shallower or deeper water changes the loss estimate.")]
+    if max(o.get("evidence_uplift", 0), o.get("ml_uplift", 0)) > 0.03:
+        steps.append(("without_ai_layers", {}, "Separate the AI uplift from the terrain-and-river map result."))
+    steps.append(("flood_reports_near", {"top": 3}, "Check for cited flood reports near the location."))
+    steps.append(("broker_queries", {}, "Identify the next information needed to complete this review."))
+    return steps[:MAX_STEPS]
+
+
 def step_text(step):
     """One plain line saying what a step found."""
     r, t = step["result"], step["tool"]
@@ -155,18 +208,27 @@ def step_text(step):
         return f"Could not run: {r['error']}"
     if t == "price_other_location":
         return (f"At {r['where']} ({r['km_from_gps_point']} km from the GPS point) the risk is {r['risk_band']} at "
-                f"KES {r['expected_loss_per_year_m']:.1f} m a year.")
+            f"{money_m(r['expected_loss_per_year_m'])} a year.")
     if t == "basement_sensitivity":
         return (f"If basements flood {r['basement_fill_m']:g} m deep instead of {r['assumed_fill_m']:g} m, the loss is "
-                f"KES {r['expected_loss_per_year_m']:.1f} m a year.")
+            f"{money_m(r['expected_loss_per_year_m'])} a year.")
     if t == "without_ai_layers":
-        return (f"On the flood map alone it would be {r['risk_band']} at KES {r['expected_loss_per_year_m']:.1f} m a "
+        return (f"On the flood map alone it would be {r['risk_band']} at {money_m(r['expected_loss_per_year_m'])} a "
                 f"year: the rating rests on the drainage flood reports and the ML model.")
+    if t == "depth_sensitivity":
+        return (f"Across {r['depth_low_m']:g}–{r['depth_high_m']:g} m per full hazard score, expected loss ranges from "
+            f"{money_m(r['low']['expected_loss_per_year_m'])} to "
+            f"{money_m(r['high']['expected_loss_per_year_m'])} a year; the current assumption gives "
+            f"{money_m(r['as_assumed']['expected_loss_per_year_m'])}.")
     if t == "flood_reports_near":
         if not r.get("reports"):
             return "No flood reports near the site."
         r0 = r["reports"][0]
-        return f"Flood reports name {r0['place']} {r0['km']} km away, against the broker's 'no flood history'."
+        if r.get("case_type") == "claim":
+            return f"Flood reports name {r0['place']} {r0['km']} km from the claim location."
+        if r.get("against_no_history"):
+            return f"Flood reports name {r0['place']} {r0['km']} km away, against the submission's no-flood-history statement."
+        return f"Flood reports name {r0['place']} {r0['km']} km from this site."
     if t == "broker_queries":
         return f"{len(r['queries'])} questions for the broker."
     return ""
@@ -186,6 +248,9 @@ def cases(o, steps):
             out.append((f"Basements {r['basement_fill_m']:g} m deep", r["expected_loss_per_year_m"], "case"))
         elif s_["tool"] == "without_ai_layers":
             out.append(("Flood map only (no AI)", r["expected_loss_per_year_m"], "diagnostic"))
+        elif s_["tool"] == "depth_sensitivity":
+            out.extend([(f"Depth {r['depth_low_m']:g} m", r["low"]["expected_loss_per_year_m"], "diagnostic"),
+                        (f"Depth {r['depth_high_m']:g} m", r["high"]["expected_loss_per_year_m"], "diagnostic")])
     return out
 
 
@@ -193,31 +258,62 @@ def _rule_final(ctx, trace):
     o = ctx["o"]
     priced = [t["result"] for t in trace if t["tool"] in ("price_other_location", "basement_sensitivity")
               and "error" not in t["result"]]
+    depth = next((t["result"] for t in trace if t["tool"] == "depth_sensitivity" and "error" not in t["result"]), None)
     aals = [o["aal_kes"] / 1e6] + [r["expected_loss_per_year_m"] for r in priced]
+    if depth:
+        aals.extend([depth["low"]["expected_loss_per_year_m"], depth["high"]["expected_loss_per_year_m"]])
     lo, hi = min(aals), max(aals)
-    bits = [f"Expected flood loss between KES {lo:.1f} m and {hi:.1f} m a year across the cases tested "
-            f"(KES {o['aal_kes'] / 1e6:.1f} m as priced)."]
+    bits = [f"Expected flood loss from {money_m(lo)} to {money_m(hi)} a year across the cases tested "
+            f"({money_m(o['aal_kes'] / 1e6)} as priced)."]
     bits += [step_text(t) for t in trace if t["tool"] not in ("broker_queries",) and "error" not in t["result"]
              and not (t["tool"] == "flood_reports_near" and not t["result"].get("reports"))]
     qs = next((t["result"]["queries"] for t in trace if t["tool"] == "broker_queries"), [])
     return dict(summary=" ".join(bits), queries=qs[:5], range_m=(round(lo, 2), round(hi, 2)), source="rules")
 
 
-def _email(o, queries):
+def _email(o, queries, recipient="broker"):
     name = ((o.get("submission") or {}).get("client") or o["label"]).split("(")[0].strip()
-    lines = [f"Subject: {name} - questions before we can quote flood cover", "",
-             "Dear broker,", "", "Thank you for the submission. Before we can offer flood terms, please clarify:", ""]
+    claim = o.get("claim") is not None
+    subject = "questions about the flood claim" if claim else "questions before we can quote flood cover"
+    opening = "Before we complete the flood claim review, please clarify:" if claim else \
+        "Before we can offer flood terms, please clarify:"
+    lines = [f"Subject: {name} - {subject}", "", f"Dear {recipient},", "",
+             "Thank you for the information. " + opening, ""]
     lines += [f"{i}. {q}" for i, q in enumerate(queries, 1)]
     lines += ["", "Kind regards,", "[Underwriter]"]
     return "\n".join(lines)
 
 
+def _client_update(o):
+    """Draft a plain-language status update using only the evaluated case facts."""
+    name = ((o.get("submission") or {}).get("client") or o["label"]).split("(")[0].strip()
+    if o.get("claim"):
+        claim = o["claim"]
+        opening = (f"Our initial flood-model review of the reported loss for {name} is: "
+                   f"{claim['verdict'].lower()}. {claim['text']}")
+        subject = f"Flood claim update: {name}"
+        next_step = "We are checking the supporting event and damage information alongside the applicable policy terms."
+    else:
+        events = o["events"].set_index("return_period")
+        severe = events.loc[100] if 100 in events.index else events.iloc[-2]
+        opening = (f"Our initial flood-risk assessment for {name} places the location in the {o['risk_band'].lower()} "
+                   f"risk band. Modelled annual flood damage is about {money_m(o['aal_kes'] / 1e6)}; "
+                   f"the modelled loss in a 1-in-100 event is about {money_m(severe.loss_kes / 1e6)}.")
+        subject = f"Initial flood-risk update: {name}"
+        next_step = "An underwriter will review the exact location and proposed policy terms before any offer is made."
+    return (f"Subject: {subject}\n\nHello,\n\n{opening}\n\n{next_step}\n\n"
+            "These are preliminary model estimates, not a quote, confirmation of cover, or a coverage decision. "
+            "The flood map is a terrain-and-river proxy, while flood depths and event frequencies are assumptions; "
+            "actual drainage conditions and event evidence may differ.\n\nKind regards,\n[Underwriter]")
+
+
 # ------------------------------------------------------------------ agent loop
-PROMPT = """You are a reinsurance underwriter's review agent. A broker's flood submission has been read and checked;
-investigate the problems below with the tools, most important first, then finish. Every number you write must come
+PROMPT = """You are an underwriter's case review agent. Investigate this case with the available tools, prioritizing
+material uncertainties and evidence, then finish. Describe tested scenarios as sensitivities, not likelihood ranges.
+Every number you write must come
 from a tool result or the facts below. At most {n} tool calls. Do not repeat a call.
 
-SUBMISSION CHECK:
+CASE CHECKS:
 {flags}
 
 AS PRICED: {priced}
@@ -231,23 +327,31 @@ STEPS SO FAR:
 Reply with JSON only, either
 {{"tool": "<name>", "args": {{...}}, "why": "<one sentence: why this step>"}}
 or, when done,
-{{"final": {{"summary": "<3-5 sentences for the underwriter: the range of outcomes and what it depends on>",
+{{"final": {{"summary": "<3-5 sentences for the underwriter: result, tested sensitivities and what to verify next>",
             "queries": ["<question for the broker>", "..."]}}}}"""
 
 
 def _facts_text(ctx):
     o = ctx["o"]
-    flags = "\n".join(f"- [{x['level']}] {x['title']}: {x['detail']}" for x in ctx["flags"])
-    priced = json.dumps(dict(risk_band=o["risk_band"], flood_score=round(o["final_score"], 2),
+    flags = "\n".join(f"- [{x['level']}] {x['title']}: {x['detail']}" for x in ctx.get("flags", [])) or "No submission flags."
+    priced = json.dumps(dict(case_type=ctx.get("kind", "submission"), risk_band=o["risk_band"],
+                             claim_verdict=(o.get("claim") or {}).get("verdict"), flood_score=round(o["final_score"], 2),
                              map_score=round(o["site_score"], 2), expected_loss_per_year_m=_m(o["aal_kes"]),
                              insured_loss_per_year_m=_m(o["aal_insured_kes"]), tiv_m=_m(o["tiv_kes"]),
                              address=(ctx["f"].get("address") or {}).get("value"), gps=[o["lat"], o["lon"]]))
     return flags, priced
 
 
+def _invalid_case_wording(text, ctx):
+    if re.search(r"[$€£]|\b(?:USD|EUR|GBP|dollars?|euros?|pounds?)\b", text, re.I):
+        return True
+    return ctx.get("kind") in ("proposal", "claim") and bool(re.search(r"\bsubmission\b", text, re.I))
+
+
 def run(ctx, call=None, on_step=None):
     """Returns dict(steps=[{tool, args, why, result, label}], summary, queries, email, range_m, source, dropped)."""
     trace = []
+    llm_tool_calls = 0
 
     def do(tool, args, why):
         try:
@@ -261,8 +365,15 @@ def run(ctx, call=None, on_step=None):
 
     final = None
     if call is not None:
+        is_submission = "submission" in ctx.get("o", {})
+        available_tools = TOOLS if is_submission else {
+            name: TOOLS[name] for name in ("depth_sensitivity", "without_ai_layers", "flood_reports_near", "broker_queries")}
+        if not is_submission:
+            for tool, args, why in case_plan(ctx):
+                do(tool, args, why)
         flags, priced = _facts_text(ctx)
-        tools = "\n".join(f"- {n}: {d}; args {json.dumps(a) if a else 'none'}" for n, (_, d, a) in TOOLS.items())
+        tools = "\n".join(f"- {n}: {d}; args {json.dumps(a) if a else 'none'}"
+                           for n, (_, d, a) in available_tools.items())
         for _ in range(MAX_STEPS + 1):
             steps = "\n".join(f"{i}. {t['tool']}({json.dumps(t['args'])}) -> {json.dumps(t['result'], default=str)[:1500]}"
                               for i, t in enumerate(trace, 1)) or "(none)"
@@ -275,11 +386,14 @@ def run(ctx, call=None, on_step=None):
                 final = msg.get("final") if isinstance(msg.get("final"), dict) else None
                 break
             tool = msg.get("tool")
-            if tool not in TOOLS or any(t["tool"] == tool and t["args"] == (msg.get("args") or {}) for t in trace):
+            if tool not in available_tools or any(t["tool"] == tool and t["args"] == (msg.get("args") or {})
+                                                  for t in trace):
                 break
             do(tool, msg.get("args"), str(msg.get("why", ""))[:200])
+            llm_tool_calls += 1
     if not trace:                                  # no LLM, or it failed before doing anything: the rule plan
-        for tool, args, why in rule_plan(ctx):
+        plan = rule_plan(ctx) if "submission" in ctx.get("o", {}) else case_plan(ctx)
+        for tool, args, why in plan:
             do(tool, args, why)
     elif not any(t["tool"] == "broker_queries" for t in trace):
         do("broker_queries", {}, "Turn the problems found into questions for the broker.")
@@ -290,13 +404,18 @@ def run(ctx, call=None, on_step=None):
         evidence = json.dumps([t["result"] for t in trace], default=str) + " " + " ".join(_facts_text(ctx))
         summ = str(final.get("summary", "")).strip()
         qs = [str(q).strip() for q in (final.get("queries") or []) if str(q).strip()][:5]
-        ok_q = [q for q in qs if not agent.verify_numbers(q, evidence)]
+        ok_q = [q for q in qs if not agent.verify_numbers(q, evidence) and not _invalid_case_wording(q, ctx)]
         dropped = len(qs) - len(ok_q)
-        if summ and not agent.verify_numbers(summ, evidence):
+        if summ and not agent.verify_numbers(summ, evidence) and not _invalid_case_wording(summ, ctx):
             out.update(summary=summ, source="ai")
         else:
             dropped += 1 if summ else 0
         if ok_q:
             out["queries"] = ok_q
-    out.update(steps=trace, email=_email(ctx["o"], out["queries"]), dropped=dropped)
+    planner_source = "ai" if llm_tool_calls else "llm" if call is not None else "rules"
+    out.update(steps=trace, email=_email(ctx["o"], out["queries"]),
+               cedant_email=_email(ctx["o"], out["queries"], recipient="cedant"),
+               client_update=_client_update(ctx["o"]),
+               dropped=dropped,
+               planner_source=planner_source)
     return out

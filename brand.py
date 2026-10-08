@@ -42,8 +42,14 @@ TEMPLATE = "kenyare"
 
 # small CSS touches the Streamlit theme (.streamlit/config.toml) can't express
 CSS = f"""<style>
-h1, h2, h3, h4 {{ letter-spacing: -0.01em; }}
-h1 {{ border-bottom: 3px solid {CRIMSON}; padding-bottom: .25rem; display: inline-block; }}
+:root {{ --kre-ink: {NAVY}; --kre-accent: {CRIMSON}; --kre-canvas: #F7F8FA; --kre-line: {GRID}; }}
+[data-testid="stMain"] {{ background: var(--kre-canvas); }}
+[data-testid="stMainBlockContainer"] {{ max-width: 1500px; padding: 2rem 2.5rem 4rem; }}
+h1, h2, h3, h4 {{ letter-spacing: 0; color: var(--kre-ink); }}
+h1 {{ border: 0; padding: 0; display: block; }}
+h2 {{ font-size: 1.35rem; }}
+h3 {{ font-size: 1.1rem; }}
+[data-testid="stMarkdownContainer"] p {{ line-height: 1.55; }}
 [data-testid="stMetricValue"] {{ color: {NAVY}; font-family: Archivo, Roboto, sans-serif; font-size: 1.85rem; }}
 [data-testid="stMetricValue"] > div {{ overflow: visible; text-overflow: clip; }}
 /* sidebar navigation: grouped page links (st.page_link) in keyed containers - .st-key-* classes are Streamlit's
@@ -53,14 +59,14 @@ h1 {{ border-bottom: 3px solid {CRIMSON}; padding-bottom: .25rem; display: inlin
   margin: .75rem; padding: 1.25rem 1rem; box-shadow: 0 4px 18px rgba(4, 29, 59, .25); }}
 .kre-nav-group {{ font-size: .68rem; letter-spacing: .08em; text-transform: uppercase; color: #7F93AD; font-weight: 700;
   margin: .6rem 0 .1rem .3rem; }}
-.st-key-kre_nav, .st-key-kre_nav [data-testid="stVerticalBlock"] {{ gap: .2rem; }}
-.st-key-kre_nav a[data-testid="stPageLink-NavLink"] {{ padding: .5rem .8rem; border-radius: 10px; background: transparent; }}
+.st-key-kre_nav, .st-key-kre_nav [data-testid="stVerticalBlock"] {{ gap: .3rem; }}
+.st-key-kre_nav a[data-testid="stPageLink-NavLink"] {{ padding: .55rem .8rem; border-radius: 6px; background: transparent; }}
 .st-key-kre_nav a[data-testid="stPageLink-NavLink"]:hover {{ background: rgba(255, 255, 255, .08); }}
 .st-key-kre_nav a[data-testid="stPageLink-NavLink"] span,
 .st-key-kre_nav a[data-testid="stPageLink-NavLink"] p {{ color: #E6ECF3 !important; font-size: .98rem; }}
 .st-key-kre_nav a[data-testid="stPageLink-NavLink"] [data-testid="stIconMaterial"] {{ color: #9FB3CC !important; font-size: 1.25rem; }}
 .st-key-kre_nav_on a[data-testid="stPageLink-NavLink"] {{ background: {CRIMSON} !important;
-  box-shadow: 0 2px 10px rgba(195, 13, 53, .45); }}
+  box-shadow: none; }}
 .st-key-kre_nav_on a[data-testid="stPageLink-NavLink"] span, .st-key-kre_nav_on a[data-testid="stPageLink-NavLink"] p,
 .st-key-kre_nav_on a[data-testid="stPageLink-NavLink"] [data-testid="stIconMaterial"] {{ color: #FFFFFF !important; font-weight: 700; }}
 /* sidebar expanders (analyst controls): light heading on the navy panel, white body with navy text */
@@ -76,8 +82,11 @@ h1 {{ border-bottom: 3px solid {CRIMSON}; padding-bottom: .25rem; display: inlin
 [data-testid="stSidebar"] [data-testid="stExpanderDetails"] label span {{ color: {NAVY} !important; }}
 [data-testid="stSidebar"] [data-testid="stCaptionContainer"] {{ color: #9FB3CC; }}
 /* navy carries the layout, crimson is the accent */
-[data-testid="stMetric"] {{ background: #F4F7FB; border: 1px solid {GRID}; border-left: 4px solid {NAVY};
-  border-radius: 12px; padding: .8rem 1rem; }}
+[data-testid="stMetric"] {{ background: #FFFFFF; border: 1px solid {GRID}; border-top: 2px solid {NAVY};
+  border-radius: 6px; padding: .8rem 1rem; }}
+[data-testid="stButton"] button {{ border-radius: 6px; font-weight: 600; min-height: 2.6rem; }}
+[data-testid="stTextInput"] input, [data-testid="stNumberInput"] input,
+[data-testid="stSelectbox"] [data-baseweb="select"] > div {{ border-radius: 6px; }}
 [data-testid="stTab"][aria-selected="true"] {{ border-bottom: 3px solid {NAVY} !important; }}
 [data-testid="stTab"][aria-selected="true"]::after, [data-testid="stTab"][aria-selected="true"]::before {{ background: {NAVY} !important; }}
 [data-testid="stTab"][aria-selected="true"] p {{ color: {NAVY} !important; font-weight: 700; }}
@@ -133,36 +142,36 @@ def page_header(title, subtitle_html, intro=None):
             f"<div style='margin-top:.3rem;max-width:760px;line-height:1.5'>{subtitle_html}</div></details></div>")
 
 
-# loading overlay: the mark's three pieces drift apart and snap back together while the app is busy. Shown only while
-# Streamlit's own "running" indicator (stStatusWidget) is on the page, and only after 0.6 s, so quick reruns don't flash.
+# Non-blocking progress toast: visible during long model runs without obscuring the controls or results.
 _LOADER_CSS = """<style>
-.kre-loader { position: fixed; inset: 0; z-index: 999990; display: none; flex-direction: column; align-items: center;
-  justify-content: center; gap: 18px; background: rgba(255, 255, 255, .78); backdrop-filter: blur(3px); opacity: 0; }
+.kre-loader { position: fixed; inset: auto 1rem 1rem auto; z-index: 999990; display: none; flex-direction: row;
+  align-items: center; gap: 10px; max-width: calc(100vw - 2rem); padding: 10px 14px; background: #fff;
+  border: 1px solid __GRID__; border-left: 4px solid __CRIMSON__; border-radius: 6px;
+  box-shadow: 0 4px 18px rgba(4, 29, 59, .12); opacity: 0; pointer-events: none; }
 body:has([data-testid="stStatusWidget"]) .kre-loader { display: flex; animation: kre-in .3s ease .6s forwards; }
 @keyframes kre-in { to { opacity: 1; } }
 body:has([data-testid="stChatInput"]) .kre-loader { display: none !important; }   /* assistant: has its own "Thinking..." */
 body:has(.kre-agent-live) .kre-loader { display: none !important; }   /* review agent: shows its own live steps */
-.kre-mark { position: relative; width: 92px; height: 112px; animation: kre-breathe 1.8s ease-in-out infinite; }
+.kre-mark { position: relative; flex: none; width: 26px; height: 32px; animation: none; }
 .kre-mark img { position: absolute; inset: 0; width: 100%; height: 100%; }
-.kre-mark .kre-grey { animation: kre-grey 1.8s cubic-bezier(.65, 0, .35, 1) infinite; }
-.kre-mark .kre-red  { animation: kre-red  1.8s cubic-bezier(.65, 0, .35, 1) infinite; }
-.kre-mark .kre-navy { animation: kre-navy 1.8s cubic-bezier(.65, 0, .35, 1) infinite; }
+.kre-mark img { animation: none !important; }
 @keyframes kre-grey  { 0%, 12%, 88%, 100% { transform: none; } 50% { transform: translate(-20px, -18px) rotate(-8deg); } }
 @keyframes kre-red   { 0%, 12%, 88%, 100% { transform: none; } 50% { transform: translate(20px, -10px) rotate(7deg); } }
 @keyframes kre-navy  { 0%, 12%, 88%, 100% { transform: none; } 50% { transform: translate(-8px, 22px) rotate(-4deg); } }
 @keyframes kre-breathe { 0%, 100% { transform: scale(1); } 50% { transform: scale(.92); } }
-.kre-loader-text { font-family: Archivo, Roboto, sans-serif; font-weight: 600; font-size: 1rem; color: __NAVY__;
-  letter-spacing: .01em; }
-.kre-loader-sub { font-size: .8rem; color: #5B6470; margin-top: -10px; }
+.kre-loader-text { font-family: Archivo, Roboto, sans-serif; font-weight: 600; font-size: .82rem; color: __NAVY__; }
+.kre-loader-sub { display: none; }
 @media (prefers-reduced-motion: reduce) {
   .kre-mark, .kre-mark img { animation: none !important; }
-  .kre-mark { animation: kre-pulse 1.6s ease-in-out infinite !important; }
-  @keyframes kre-pulse { 50% { opacity: .45; } }
 }
-</style>""".replace("__NAVY__", NAVY)
+@media (max-width: 700px) {
+  [data-testid="stMainBlockContainer"] { padding: 1.2rem 1rem 3rem; }
+  .kre-loader { inset: auto .75rem .75rem auto; }
+}
+</style>""".replace("__NAVY__", NAVY).replace("__GRID__", GRID).replace("__CRIMSON__", CRIMSON)
 
 
-def loader(text="Running the flood model", sub="hazard, damage and loss for 600 buildings"):
+def loader(text="Running the flood model", sub="hazard, damage and loss for every building"):
     """The overlay markup (CSS + the three stacked pieces). Put it on the page once per run."""
     return (_LOADER_CSS + "<div class='kre-loader' role='status' aria-live='polite'><div class='kre-mark'>"
             f"<img class='kre-grey' src='{_uri('mark_grey.png')}' alt=''>"
@@ -175,10 +184,10 @@ def loader(text="Running the flood model", sub="hazard, damage and loss for 600 
 # headline number cards: a responsive grid (cards wrap to a new row instead of squeezing), label + value + sub-line all
 # inside the card, value sized to fit. One card may be marked key (crimson edge) - the figure the page is about.
 _KPI_CSS = """<style>
-.kre-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(215px, 1fr)); gap: 14px; margin: .2rem 0 1.4rem; }
-.kre-kpi { background: #F4F7FB; border: 1px solid __GRID__; border-left: 4px solid __NAVY__; border-radius: 12px;
-  padding: 14px 16px 13px; min-width: 0; }
-.kre-kpi.key { border-left-color: __CRIMSON__; background: #FFF7F9; }
+.kre-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(215px, 1fr)); gap: 14px; margin: .3rem 0 1.35rem; }
+.kre-kpi { background: #FFFFFF; border: 1px solid __GRID__; border-top: 2px solid __NAVY__; border-radius: 6px;
+  padding: 18px 18px 16px; min-width: 0; }
+.kre-kpi.key { border-top-color: __CRIMSON__; background: #FFF9FA; }
 .kre-kpi .l { font-size: .8rem; color: #4A5565; line-height: 1.3; }
 .kre-kpi .v { font-family: Archivo, Roboto, sans-serif; font-weight: 600; color: __NAVY__; line-height: 1.1;
   font-size: clamp(1.3rem, 1.05rem + 0.9vw, 1.85rem); margin: .35rem 0 .3rem; white-space: nowrap; overflow: hidden;

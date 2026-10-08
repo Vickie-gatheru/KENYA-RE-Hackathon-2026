@@ -347,7 +347,9 @@ rr = RA.run(ctx, None)
 tools_run = [s_["tool"] for s_ in rr["steps"]]
 res.append(ok(tools_run[0] == "price_other_location" and "basement_sensitivity" in tools_run
               and tools_run[-1] == "broker_queries" and rr["source"] == "rules" and rr["queries"]
-              and rr["range_m"][0] <= round(oo["aal_kes"] / 1e6, 2) <= rr["range_m"][1] and "Dear broker" in rr["email"],
+              and rr["range_m"][0] <= round(oo["aal_kes"] / 1e6, 2) <= rr["range_m"][1] and "Dear broker" in rr["email"]
+              and "Dear cedant" in rr["cedant_email"]
+              and "not a quote" in rr["client_update"].lower() and "coverage decision" in rr["client_update"].lower(),
               "review agent (rules): investigates the flags in order, prices the cases, drafts queries"))
 script = iter([json.dumps({"tool": "basement_sensitivity", "args": {"fill_m": 2}, "why": "test the assumption"}),
                json.dumps({"final": {"summary": "Loss could be KES 4,321 m a year.", "queries": ["Is the basement dry?"]}})])
@@ -357,9 +359,94 @@ script = iter([json.dumps({"tool": "basement_sensitivity", "args": {"fill_m": 2}
                json.dumps({"final": {"summary": f"With 2 m basements the loss is KES {b2} m a year.",
                                      "queries": ["Is the basement dry?"]}})])
 ra_ok = RA.run(ctx, lambda p: next(script))
-res.append(ok(ra_ai["source"] == "rules" and ra_ok["source"] == "ai" and ra_ok["queries"] == ["Is the basement dry?"]
+res.append(ok(ra_ai["source"] == "rules" and ra_ai["planner_source"] == "ai"
+              and ra_ok["source"] == "ai" and ra_ok["planner_source"] == "ai"
+              and ra_ok["queries"] == ["Is the basement dry?"]
               and [s_["tool"] for s_ in ra_ok["steps"]] == ["basement_sensitivity", "broker_queries"],
               "review agent (AI): LLM picks the tools; a summary with an invented number falls back to rules"))
+currency_script = iter([json.dumps({"tool": "depth_sensitivity", "args": {}, "why": "test depth uncertainty"}),
+                        json.dumps({"final": {"summary": "The expected annual loss is USD 0.04 million.",
+                                               "queries": ["Please confirm the reported flood history."]}})])
+ra_currency = RA.run(dict(o=o, f={}, d=d, S={"signals": raw}, kind="proposal"), lambda p: next(currency_script))
+res.append(ok(ra_currency["source"] == "rules" and ra_currency["planner_source"] == "llm"
+              and "KES" in ra_currency["summary"] and "USD" not in ra_currency["summary"],
+              "case agent: foreign-currency summary falls back to tool-derived KES wording"))
+case_ctx = dict(o=o, d=d, S={"signals": raw}, kind="proposal")
+case_review = RA.run(case_ctx, None)
+case_tools = [s_["tool"] for s_ in case_review["steps"]]
+depth_result = next(s_["result"] for s_ in case_review["steps"] if s_["tool"] == "depth_sensitivity")
+res.append(ok(case_tools == ["depth_sensitivity", "flood_reports_near", "broker_queries"]
+              and depth_result["low"]["expected_loss_per_year_m"] <= depth_result["as_assumed"]["expected_loss_per_year_m"]
+              <= depth_result["high"]["expected_loss_per_year_m"]
+              and "Dear broker" in case_review["email"] and bool(case_review["queries"])
+              and case_review["planner_source"] == "rules"
+              and "KES 0.0 m" not in case_review["summary"],
+              "case agent: proposal tests depth, gathers evidence and drafts follow-up"))
+res.append(ok(RA.money_m(0.041) == "KES 41 k" and RA.money_m(1.25) == "KES 1.2 m",
+              "case agent: small losses retain readable currency precision"))
+case_prompts = []
+case_ai = RA.run(dict(o=o, f={}, d=d, S={"signals": raw}, kind="proposal"),
+                 lambda p: case_prompts.append(p) or json.dumps({"final": {
+                     "summary": "The review tested depth, flood reports and the map-only case; confirm site details.",
+                     "queries": ["Please confirm the exact site coordinates."]}}))
+case_ai_tools = [s_["tool"] for s_ in case_ai["steps"]]
+res.append(ok(case_ai_tools == ["depth_sensitivity", "flood_reports_near", "broker_queries"]
+              and "basement_sensitivity" not in case_prompts[0] and "price_other_location" not in case_prompts[0]
+              and case_ai["source"] == "ai" and case_ai["planner_source"] == "llm",
+              "case agent: AI can summarize, but core checks run first and unsupported tools are hidden"))
+claim_review = RA.run(dict(o=oc, d=d, S={"signals": raw}, kind="claim"), None)
+res.append(ok("questions about the flood claim" in claim_review["email"]
+              and any("event date" in q.lower() for q in claim_review["queries"])
+              and oc["claim"]["verdict"].lower() in claim_review["client_update"].lower()
+              and "coverage decision" in claim_review["client_update"].lower()
+              and all("no flood history" not in RA.step_text(s_).lower() for s_ in claim_review["steps"]),
+              "case agent: claim gets claim-specific follow-up and evidence wording"))
+report_o = dict(o, ai_evidence=pd.DataFrame([dict(place_name="Mathare", distance_km=0.2, uplift=0.1, severity=2,
+                                                   confidence=0.9, mechanisms="drainage_blockage", sources="TEST")]))
+risk_report = RA.flood_reports_near(dict(o=report_o, S={"signals": None}, f={}))
+risk_report_text = RA.step_text(dict(tool="flood_reports_near", result=risk_report))
+submission_report = RA.flood_reports_near(dict(o=dict(report_o, submission={"client": "Test"}), S={"signals": None},
+                                                 f={"flood_claims": ["No flood history at this site"]}))
+submission_report_text = RA.step_text(dict(tool="flood_reports_near", result=submission_report))
+res.append(ok("no flood history" not in risk_report_text.lower()
+              and "against the submission's no-flood-history statement" in submission_report_text,
+              "case agent: report contradicts only an explicit submission claim"))
+from urllib.parse import parse_qs, urlparse
+import evaluate_page as EP
+mailto = EP._mailto_draft("Subject: Flood update — Mathare\n\nHello,\n\nFirst line.\nSecond line.")
+mailto_parts = urlparse(mailto)
+mailto_fields = parse_qs(mailto_parts.query)
+res.append(ok(mailto_parts.scheme == "mailto" and mailto_fields["subject"] == ["Flood update — Mathare"]
+              and mailto_fields["body"] == ["Hello,\n\nFirst line.\nSecond line."],
+              "email link: subject, Unicode, and editable body are encoded"))
+
+# ---- portfolio importer (an insurer's own column names and building types; built in memory, nothing in data/)
+import importer as IM
+book = pd.DataFrame({"PolicyRef": ["A1", "A2", "A3", "A4", "A5", "A6"],
+                     "Latitude": [-1.30, 1.28, np.nan, -0.09, -1.26, -1.31],
+                     "Longitude": [36.80, 36.82, 36.85, 34.75, 36.87, 36.79],
+                     "Construction": ["RC frame", "Concrete block", "Brick", "Mabati", "Prefab container", "Timber"],
+                     "Sum Insured": ["KES 5,000,000", "2500000", "1000000", "900000", "700000", ""]})
+cols = IM.guess_columns(book)
+res.append(ok(cols == {"loc_id": "PolicyRef", "lat": "Latitude", "lon": "Longitude", "tiv_kes": "Sum Insured",
+                       "housing_class": "Construction", "floor_area_m2": None, "floors": None},
+              "importer: the insurer's column names are matched automatically"))
+res.append(ok([IM.classify(t) for t in ["RC frame", "Concrete block", "Mabati", "Timber", "Prefab container"]]
+              == ["concrete_rcc", "permanent_masonry", "informal_iron_sheet", "semi_permanent", None],
+              "importer: building types mapped (block walls are masonry, not RC); unknown stays unknown"))
+bk, rep = IM.prepare(book, cols)
+res.append(ok(list(bk.loc_id) == ["A1", "A2"] and bk.lat.iloc[1] == -1.28 and rep["reasons"] == {
+              "no usable coordinates": 1, "outside the flood map": 1, "building type not recognised": 1,
+              "no insured value": 1} and bk.tiv_kes.iloc[0] == 5e6 and not bk.isna().any().any(),
+              "importer: unusable rows rejected with a reason each; missing minus sign fixed; 'KES 5,000,000' read"))
+bk2, rep2 = IM.prepare(book, cols, default_class="permanent_masonry")
+res.append(ok("A5" in set(bk2.loc_id) and rep2["rows_used"] == 3, "importer: a chosen default type keeps unknown rows"))
+try:
+    cm.deterministic(bk.assign(tiv_kes=[np.nan, 1e6]))
+    guarded = False
+except ValueError:
+    guarded = True
+res.append(ok(guarded, "model refuses a portfolio with blank values instead of returning NaN losses"))
 
 print(f"\n{sum(res)}/{len(res)} passed")
 sys.exit(0 if all(res) else 1)

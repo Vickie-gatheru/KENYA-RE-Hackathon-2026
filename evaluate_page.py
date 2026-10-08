@@ -2,6 +2,7 @@
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
+from urllib.parse import quote
 
 import brand
 import catmodel as cm
@@ -198,18 +199,30 @@ def _review_html(o, r):
     cs = ra.cases(o, r["steps"])
     top = max(v for _, v, _ in cs) or 1
     colour = {"base": brand.NAVY, "case": BLUE, "diagnostic": "#C9D2DE"}
-    bars = "".join(f"<div class='case'><span>{e(lbl)}</span><div class='bar' style='width:{max(v / top, .01) * 100:.0f}%;"
-                   f"background:{colour[k]}'></div><span class='v'>KES {v:.1f}m</span></div>" for lbl, v, k in cs)
+    bars = "".join(
+        f"<div class='case'><span>{e(lbl)}</span><div class='bar' style='width:{max(v / top, .01) * 100:.0f}%;"
+        f"background:{colour[k]}'></div><span class='v'>{ra.money_m(v)}</span></div>"
+        for lbl, v, k in cs)
     lo, hi = r["range_m"]
     steps = "".join(f"<li><b>{e(s_['label'])}</b><span class='why'>{e(s_['why'])}</span>"
                     f"<span class='res'>{e(ra.step_text(s_))}</span></li>" for s_ in r["steps"])
     src = ("AI-planned · numbers checked ✓" + (f" · {r['dropped']} unsupported item(s) removed" if r["dropped"] else "")
            if r["source"] == "ai" else "Rule-based plan (no AI available)")
+    if r.get("planner_source") == "ai":
+        src = "AI-selected checks · AI summary number-checked" if r["source"] == "ai" else \
+            "AI-selected checks · rule summary used"
+        if r.get("dropped"):
+            src += f" · {r['dropped']} unsupported item(s) removed"
+    elif r.get("planner_source") == "llm":
+        src = "Rule-based checks · AI summary number-checked" if r["source"] == "ai" else \
+            "Rule-based checks · rule summary used after AI check"
+    else:
+        src = "Rule-based checks · no LLM used"
     return _AGENT_CSS + (
         f"<div class='kre-agent'><div class='top'><b>Review agent</b><span class='pill'>{len(r['steps'])} steps</span>"
         f"<span class='src'>{e(src)}</span></div><div class='cols'>"
-        f"<div><h6>Expected flood loss per year, by case</h6>{bars}<div class='range'>Likely between "
-        f"<b>KES {lo:.1f} m</b> and <b>KES {hi:.1f} m</b> a year (grey: shown for comparison, not a likely case)."
+        f"<div><h6>Expected annual loss across tested scenarios</h6>{bars}<div class='range'>Tested cases span "
+        f"<b>{ra.money_m(lo)}</b> to <b>{ra.money_m(hi)}</b>. These are sensitivity checks, not probability-weighted forecasts."
         f"</div></div><div><h6>What the agent did</h6><ol>{steps}</ol></div></div>"
         f"<div class='sum'>{e(r['summary'])}</div></div>")
 
@@ -239,9 +252,68 @@ def _review_agent(st, o, d_cur, S):
         store[key] = res
     r = store[key]
     st.markdown(_review_html(o, r), unsafe_allow_html=True)
-    with st.expander("✉ Draft email to the broker - not sent"):
-        st.text_area("Draft email", r["email"], height=270, label_visibility="collapsed", key=f"email_{hash(key)}")
-        st.caption("A draft for you to edit and send yourself. The agent never sends anything.")
+    _response_drafts(st, o, r, key)
+
+
+def _response_drafts(st, o, result, key):
+    st.markdown("#### Response drafts")
+    client_tab, followup_tab = st.tabs(["Client update", "Broker / cedant follow-up"])
+    with client_tab:
+        st.caption("Preliminary status only. Not a quote, confirmation of cover, or coverage decision. Not sent.")
+        client = st.text_area("Client update", result["client_update"], height=220, key=f"client_update_{hash(key)}")
+        open_client, save_client = st.columns(2, gap="medium")
+        open_client.link_button("Open in email", _mailto_draft(client), icon=":material/mail:",
+                                use_container_width=True)
+        save_client.download_button("Download client update", client, file_name="flood_client_update.txt",
+                                    mime="text/plain", key=f"download_client_{hash(key)}",
+                                    use_container_width=True)
+    with followup_tab:
+        st.caption("Review and edit before sharing. Nothing is sent from this tool.")
+        recipient = st.segmented_control("Recipient", ["Broker", "Cedant"], default="Broker",
+                                         key=f"followup_recipient_{hash(key)}") or "Broker"
+        draft = result["email"] if recipient == "Broker" else result["cedant_email"]
+        followup = st.text_area("Broker or cedant follow-up", draft, height=220,
+                                key=f"followup_{hash(key)}_{recipient.lower()}")
+        open_followup, save_followup = st.columns(2, gap="medium")
+        open_followup.link_button("Open in email", _mailto_draft(followup), icon=":material/mail:",
+                                  use_container_width=True)
+        save_followup.download_button("Download follow-up", followup,
+                                      file_name=f"flood_{recipient.lower()}_follow_up.txt", mime="text/plain",
+                                      key=f"download_followup_{hash(key)}_{recipient.lower()}",
+                                      use_container_width=True)
+
+
+def _mailto_draft(draft):
+    subject, _, body = draft.partition("\n")
+    if subject.lower().startswith("subject:"):
+        subject = subject.split(":", 1)[1].strip()
+    return f"mailto:?subject={quote(subject, safe='')}&body={quote(body.lstrip(), safe='')}"
+
+
+def _case_agent(st, o, d_cur, S):
+    """Investigate a proposal or claim with deterministic model tools; no decision or message is sent."""
+    import review_agent as ra
+    tier_key = tuple(sorted((S.get("tier_rp") or {}).items()))
+    depth_key = float(S.get("depth_scale") or cm.DEPTH_SCALE_M)
+    key = (o["label"], round(o["tiv_kes"]), round(o["lat"], 5), round(o["lon"], 5), o["housing_class"],
+           (o.get("claim") or {}).get("claimed_kes"), round(o["final_score"], 4), depth_key, tier_key)
+    store = st.session_state.setdefault("case_reviews", {})
+    if key not in store:
+        st.caption("The agent tests depth uncertainty, checks whether AI uplift materially affects the result, "
+                   "looks for nearby cited flood reports and drafts follow-up questions. It cannot accept, decline "
+                   "or contact the broker.")
+        if not st.button("Run underwriter review", type="primary", key="run_case_review"):
+            return
+        use = llm.configured() and llm.provider() != "test"
+        ctx = dict(o=o, f={}, flags=[], d=d_cur, S=S, kind="claim" if o.get("claim") else "proposal")
+        with st.status("Reviewing the case...", expanded=True) as box:
+            result = ra.run(ctx, (lambda p: llm.complete(p, json_mode=True)) if use else None,
+                            on_step=lambda step: box.write(f"✓ **{step['label']}** · {ra.step_text(step)}"))
+            box.update(label=f"Review complete · {len(result['steps'])} checks", state="complete", expanded=False)
+        store[key] = result
+    result = store[key]
+    st.markdown(_review_html(o, result), unsafe_allow_html=True)
+    _response_drafts(st, o, result, key)
 
 
 def _locate(how, place, lat, lon, example, hs, d):
@@ -307,27 +379,25 @@ def _description_inputs(st, d):
 def render(st, S):
     d, d_cur, hs = S["d"], S["d_cur"], S["hs"]
     tech = S.get("tech", False)
-    left, right = st.columns([1, 2.3], gap="large")
     how, place, lat, lon, example = "Example location", "", -1.30, 36.80, None
     cls, tiv, claim, radius, k, run, sub = "semi_permanent", 2_000_000, None, 1.0, 10, False, None
+    mode = st.segmented_control("Assessment type", list(MODES), default="Proposal", key="eval_mode") or "Proposal"
+    kind = MODES[mode]
 
-    with left:
-        mode = st.segmented_control("What are you evaluating?", list(MODES), default="Proposal", key="eval_mode") \
-            or "Proposal"
-        kind = MODES[mode]
+    with st.container(border=True):
         if kind == SUB_KIND:
-            src = st.segmented_control("Submission", ["PDF", "Short description"], default="PDF", key="sub_src",
-                                       label_visibility="collapsed") or "PDF"
+            src = st.segmented_control("Submission source", ["PDF", "Short description"], default="PDF", key="sub_src")
             if src == "PDF":
                 sub = _submission_inputs(st)
-                run = st.button("Evaluate", type="primary", use_container_width=True, disabled=sub is None)
+                run = st.button("Review submission", type="primary", use_container_width=True, disabled=sub is None)
                 run = run or (sub is not None and sub["key"] != st.session_state.get("sub_done"))
             else:
                 _description_inputs(st, d)
         else:
             _step(st, 1, "Location")
             how = st.segmented_control("Location", ["Example location", "Place or address", "Coordinates"],
-                                       default="Example location", key="eval_how", label_visibility="collapsed",
+                                       default="Example location", key="eval_how",
+                                       label_visibility="collapsed",
                                        format_func=lambda x: {"Example location": "From list",
                                                               "Place or address": "Address",
                                                               "Coordinates": "Pin on map"}[x]) or "Example location"
@@ -341,18 +411,19 @@ def render(st, S):
                 options = list(hs.name) + list(d.loc_id)
                 example = st.selectbox("Area or insured building", options,
                                        index=options.index("Mathare") if "Mathare" in options else 0)
-            _step(st, 2, "Building")
-            cls = st.selectbox("Building type", list(NICE), format_func=NICE.get, index=1)
-            _step(st, 3, "Value" if kind != "A flood claim" else "Value and claim")
-            tiv = st.number_input("Insured value (KES)", min_value=10_000, value=2_000_000, step=100_000)
+
+            _step(st, 2, "Building and value")
+            fields = st.columns(3 if kind == "A flood claim" else 2, gap="large")
+            cls = fields[0].selectbox("Building type", list(NICE), format_func=NICE.get, index=1)
+            tiv = fields[1].number_input("Insured value (KES)", min_value=10_000, value=2_000_000, step=100_000)
             if kind == "A flood claim":
-                claim = st.number_input("Claimed loss (KES)", min_value=0, value=400_000, step=50_000)
+                claim = fields[2].number_input("Claimed loss (KES)", min_value=0, value=400_000, step=50_000)
             if tech:
                 with st.expander("Comparison settings"):
                     radius = st.slider("Search radius for nearby assets (km)", 0.5, 3.0, 1.0, 0.25)
                     k = st.slider("Maximum nearby assets to compare", 5, 20, 10)
-            st.write("")
-            run = st.button("Evaluate", type="primary", use_container_width=True)
+            run_label = "Check claim" if kind == "A flood claim" else "Run risk assessment"
+            run = st.button(run_label, type="primary", use_container_width=True)
 
     # ---- run the evaluation
     parsed = st.session_state.pop("parsed", None)
@@ -364,14 +435,14 @@ def render(st, S):
                             tier_rp=S["tier_rp"], depth_scale=S["depth_scale"], sites=S["sites"], bundle=S["bundle"],
                             ai_kwargs=S["ai_kwargs"], port_loss=S["port_loss"], label=sub["label"])
         except ValueError as e:
-            right.error(str(e)); return
+            st.error(str(e)); return
         st.session_state.evaluation = sb.apply(o, sub["facts"], sub["flags"], sub["name"])
         st.session_state.sub_done, st.session_state.eval_from = sub["key"], "submission"
     elif parsed or (kind != SUB_KIND and (run or "evaluation" not in st.session_state
                                          or st.session_state.get("eval_from") != "form")):
         loc = _locate(how, place, lat, lon, example or "Mathare", hs, d)
         if loc is None:
-            right.error(f"Could not find '{place}'. Try a nearby estate name, or drop a pin on the map.")
+            st.error(f"Could not find '{place}'. Try a nearby estate name, or drop a pin on the map.")
             return
         la, lo, src_, where = loc
         try:
@@ -380,18 +451,23 @@ def render(st, S):
                             sites=S["sites"], bundle=S["bundle"], ai_kwargs=S["ai_kwargs"],
                             port_loss=S["port_loss"], label=where)
         except ValueError as e:
-            right.error(str(e)); return
+            st.error(str(e)); return
         st.session_state.evaluation = o
         st.session_state.eval_from = "description" if parsed else "form"
+        st.session_state.evaluation_form_signature = (mode, how, place, lat, lon, example, cls, tiv, claim, radius, k)
         st.session_state.pop("sub_done", None)
     shown = st.session_state.get("eval_from")
     if kind == SUB_KIND and shown not in ("submission", "description") or "evaluation" not in st.session_state:
-        right.info("Upload a broker's submission (PDF), or paste a short description. The location, building and "
-                   "insured value are read from it - every fact with the line it came from - and the submission's "
-                   "own figures are checked.")
+        st.info("Add a broker submission as a PDF or short description to begin the review.")
         return
-    with right:
-        _results(st, st.session_state.evaluation, d_cur, S)
+    if kind != SUB_KIND:
+        current_signature = (mode, how, place, lat, lon, example, cls, tiv, claim, radius, k)
+        if current_signature != st.session_state.get("evaluation_form_signature"):
+            st.info("Inputs changed. Run the assessment to refresh the result.")
+            return
+    st.divider()
+    st.markdown("### Assessment")
+    _results(st, st.session_state.evaluation, d_cur, S)
 
 
 def _ai_explanation(st, o, S):
@@ -551,24 +627,27 @@ def _briefing(st, o):
 
 
 _DEC_CSS = """<style>
-.kre-dec { border: 1px solid __GRID__; border-radius: 14px; background: #fff; box-shadow: 0 2px 10px rgba(4, 29, 59, .06);
+.kre-dec { border: 1px solid __GRID__; border-radius: 6px; background: #fff; box-shadow: none;
   overflow: hidden; margin: .2rem 0 .8rem; }
-.kre-dec .act { padding: 12px 18px; border-bottom: 1px solid __GRID__; display: flex; gap: 14px; align-items: baseline;
+.kre-dec .act { padding: 16px 18px 14px; border-left: 4px solid transparent; border-bottom: 1px solid __GRID__;
+    display: flex; gap: 14px; align-items: baseline;
   flex-wrap: wrap; }
-.kre-dec .act.good { background: #EEF7EE; } .kre-dec .act.warn { background: #FFF7E6; } .kre-dec .act.bad { background: #FCEBEB; }
+.kre-dec .act.good { background: #F2F8F1; border-left-color: #39834A; }
+.kre-dec .act.warn { background: #FFF8E9; border-left-color: #B97E00; }
+.kre-dec .act.bad { background: #FCF0F1; border-left-color: __CRIMSON__; }
 .kre-dec .act .lab { font-size: .7rem; letter-spacing: .05em; text-transform: uppercase; color: #5B6470; font-weight: 700; }
-.kre-dec .act .val { font-family: Archivo, Roboto, sans-serif; font-weight: 700; font-size: 1.2rem; }
+.kre-dec .act .val { font-family: Archivo, Roboto, sans-serif; font-weight: 700; font-size: 1.3rem; }
 .kre-dec .act.good .val { color: #1D6B1D; } .kre-dec .act.warn .val { color: #8A5A00; } .kre-dec .act.bad .val { color: #A11D1D; }
 .kre-dec .act .why { font-size: .85rem; color: #3A4554; flex-basis: 100%; }
-.kre-dec .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
-.kre-dec .st { padding: 12px 18px; border-right: 1px solid __GRID__; }
+.kre-dec .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(165px, 1fr)); }
+.kre-dec .st { padding: 14px 16px; border-right: 1px solid __GRID__; }
 .kre-dec .st:last-child { border-right: none; }
 .kre-dec .st .lab { font-size: .76rem; color: #5B6470; }
-.kre-dec .st .val { font-family: Archivo, Roboto, sans-serif; font-weight: 700; font-size: 1.45rem; color: __NAVY__;
-  line-height: 1.25; white-space: nowrap; }
+.kre-dec .st .val { font-family: Archivo, Roboto, sans-serif; font-weight: 700; font-size: 1.55rem; color: __NAVY__;
+    line-height: 1.25; overflow-wrap: anywhere; }
 .kre-dec .st .sub { font-size: .74rem; color: #5B6470; line-height: 1.35; }
 .kre-dec .st .as { color: #8A5A00; }
-</style>""".replace("__GRID__", GRID).replace("__NAVY__", brand.NAVY)
+</style>""".replace("__GRID__", GRID).replace("__NAVY__", brand.NAVY).replace("__CRIMSON__", brand.CRIMSON)
 
 
 def _decision_html(o, b, tech):
@@ -611,18 +690,25 @@ def _results(st, o, d_cur, S):
     sub = o.get("submission")
     n_red = sum(x["level"] == "red" for x in sub["flags"]) if sub else 0
     names = ([f"Broker submission · {n_red} red flags" if n_red else "Broker submission"] if sub else []) + \
-        ["Overview", "Details"]
+        ["Overview", "Details"] + ([] if sub else ["Underwriter review"])
     tabs = st.tabs(names)
+    offset = 1 if sub else 0
     if sub:
         with tabs[0]:
             st.markdown(_submission_html(o), unsafe_allow_html=True)
             _review_agent(st, o, d_cur, S)
-    with tabs[-2]:
+    with tabs[offset]:
         st.markdown(brand.briefing_html(b, show_top=False), unsafe_allow_html=True)
-        _map(st, o, d_cur, tech)
-        _loss_bars(st, o)
-    with tabs[-1]:
+        map_col, loss_col = st.columns([1.35, 1], gap="large")
+        with map_col:
+            _map(st, o, d_cur, tech, height=360)
+        with loss_col:
+            _loss_bars(st, o)
+    with tabs[offset + 1]:
         _details(st, o, d_cur, S)
+    if not sub:
+        with tabs[offset + 2]:
+            _case_agent(st, o, d_cur, S)
 
 
 def _details(st, o, d_cur, S):

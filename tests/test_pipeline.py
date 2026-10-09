@@ -597,6 +597,18 @@ res.append(ok(waiting_before == 1 and len(QR.waiting()) == 0 and qrow.decision_i
               and qrow.status == "decided: Accept with loading" and str(qrow.contact) == "0700 000 000",
               "quote requests: a public request waits in the queue and is closed by the underwriter's decision"))
 
+# ---- asset register (portfolio managers): one row per asset; totals match the model
+import portfolio_page as PM
+det_r = cm.deterministic(d)
+WS.ensure_nairobi()
+reg = PM.register(dict(d_cur=d, loss=det_r["loss"], rps=det_r["rps"], j100=list(det_r["rps"]).index(100), hs=hs))
+port_r = det_r["loss"].sum(0)
+res.append(ok(len(reg) == len(d) and abs(reg.aal_kes.sum() - cm.aal_from_ep(det_r["rps"], port_r)) < 1
+              and abs(reg.loss100_kes.sum() - port_r[list(det_r["rps"]).index(100)]) < 1
+              and set(reg.risk) <= set(PM.BANDS) and (reg.risk[reg.score <= 0] == "Not flood-prone").all()
+              and PM.prone(99.5).startswith("in the most flood-prone 1%"),
+              "asset register: one row per asset, totals equal the portfolio's expected cost and 1-in-100 loss"))
+
 # ---- the database (store.py): everything above went into one SQLite file, with an audit trail
 kinds = {e["kind"] for e in ST.events()}
 res.append(ok(os.path.exists(ST.path()) and {"region", "decision", "quote request"} <= kinds

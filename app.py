@@ -250,7 +250,8 @@ elif _RN.cfg.get("active_model") and _RN.model() is not None:
     bundle = _RN.model()           # made active in Model workspace > Nairobi > Build model
 
 # ================================================================== sidebar
-UW_PAGES = ["Portfolio overview", "Evaluate a risk or claim", "Accumulation", "Insurance & reinsurance", "Ask the assistant"]
+UW_PAGES = ["Portfolio overview", "Asset register", "Evaluate a risk or claim", "Accumulation", "Insurance & reinsurance",
+            "Ask the assistant"]
 TECH_PAGES = ["AI drainage evidence", "ML flood model", "Sensitivity & assumptions"]
 DATA_PAGES = ["Model workspace"]
 NAV_LABEL = {"Evaluate a risk or claim": "Evaluate", "Portfolio overview": "Flood briefing",
@@ -259,10 +260,11 @@ NAV_LABEL = {"Evaluate a risk or claim": "Evaluate", "Portfolio overview": "Floo
 PAGE_ICON = {"Evaluate a risk or claim": "fact_check", "Portfolio overview": "space_dashboard",
              "Insurance & reinsurance": "shield", "Accumulation": "stacked_bar_chart", "Ask the assistant": "forum",
              "AI drainage evidence": "article", "ML flood model": "hub", "Sensitivity & assumptions": "tune",
-             "Model workspace": "model_training"}
+             "Model workspace": "model_training", "Asset register": "map"}
 URL = {"Evaluate a risk or claim": "evaluate", "Portfolio overview": "portfolio", "Accumulation": "accumulation",
        "Insurance & reinsurance": "reinsurance", "Ask the assistant": "assistant", "AI drainage evidence": "ai-evidence",
-       "ML flood model": "ml-model", "Sensitivity & assumptions": "assumptions", "Model workspace": "workspace"}
+       "ML flood model": "ml-model", "Sensitivity & assumptions": "assumptions", "Model workspace": "workspace",
+       "Asset register": "assets"}
 st.markdown(brand.CSS, unsafe_allow_html=True)
 st.sidebar.markdown(brand.SIDEBAR_BRAND, unsafe_allow_html=True)
 nav = st.sidebar.container(key="kre_nav")    # filled once the current page is known
@@ -388,7 +390,9 @@ if page == "Ask the assistant":
     st.caption("Prototype · synthetic portfolio · estimated flood map · assumed terms")
 else:
     INTRO = {"Portfolio overview": f"The {CITY_NAME} flood-loss picture: portfolio exposure, severe-event losses, uncertainty and the AI layer's measured impact.",
-             "Evaluate a risk or claim": "Price a new risk, check a flood claim, or review a broker's submission."}
+             "Evaluate a risk or claim": "Price a new risk, check a flood claim, or review a broker's submission.",
+             "Asset register": "Every asset in the book on one map: where it is, how flood-prone, what it is expected "
+                               "to cost - and where the risk is concentrated."}
     st.markdown(brand.page_header(NAV_LABEL.get(page, page), _labels, INTRO.get(page)), unsafe_allow_html=True)
 if elnino:
     st.markdown(ELNINO_BANNER, unsafe_allow_html=True)
@@ -399,6 +403,13 @@ if _R is not None:
                 f"{_R.cfg.get('active_model') or '(none: flood map + reports only)'} from the Model workspace. "
                 f"'Back to Nairobi' is in the sidebar.</div>", unsafe_allow_html=True)
 loss_cur = cur["loss"]
+
+# ================================================================== asset register (portfolio managers)
+if page == "Asset register":
+    import portfolio_page
+    portfolio_page.render(st, dict(d_cur=d_cur, loss=loss_cur, rps=rps, j100=j100, hs=hs,
+                                   sites=S_ if use_ai else None, book=BOOK_KEY, book_name=BOOK, elnino=elnino,
+                                   evaluate_page=PAGES["Evaluate a risk or claim"]))
 
 # ================================================================== 0. evaluate a risk or claim
 import evaluate_page

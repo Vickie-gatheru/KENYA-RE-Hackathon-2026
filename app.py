@@ -84,6 +84,13 @@ if _R is not None:
     raw = raw.dropna(subset=["lat", "lon"]) if len(raw) else raw
     sites = ai.consolidate(raw) if len(raw) else None
     hs = _R.validation() if _R.validation() is not None else pd.DataFrame(columns=["name", "lat", "lon"])
+else:     # Nairobi: the workspace's Nairobi region is the control point - its approved reports (new news finds, paid
+          # claims) join the project's evidence, and its active model, if one is set, replaces out/ml_model.pkl
+    _RN = ws_.Region("nairobi")
+    _extra = ws_._read_csv(_RN.p("signals.csv"))
+    if len(_extra):
+        raw = pd.concat([raw, _extra], ignore_index=True) if raw is not None else _extra
+        sites = ai.consolidate(raw.dropna(subset=["lat", "lon"]))
 CITY_NAME = _R.name if _R is not None else "Nairobi"
 HS_TXT = lambda col: f"{int(col.sum())} / {len(hs)}" if len(hs) else "no list"    # known flood areas detected
 _custom = st.session_state.get("custom_portfolio")       # a portfolio loaded on the Portfolio page replaces the starter
@@ -239,6 +246,8 @@ _mp = ml.MODEL_PATH
 bundle = load_ml(os.path.getmtime(_mp) if os.path.exists(_mp) else 0)
 if _R is not None:
     bundle = _R.model()            # the region's active model (None = flood map + approved reports only)
+elif _RN.cfg.get("active_model") and _RN.model() is not None:
+    bundle = _RN.model()           # made active in Model workspace > Nairobi > Build model
 
 # ================================================================== sidebar
 UW_PAGES = ["Portfolio overview", "Evaluate a risk or claim", "Accumulation", "Insurance & reinsurance", "Ask the assistant"]

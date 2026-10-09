@@ -577,5 +577,24 @@ WS.ensure_nairobi()
 res.append(ok(city_in == "Testville" and EVm.CITY == "Nairobi",
               "region switch: labels use the region's name, and switching back restores Nairobi"))
 
+# ---- closing the loops: paid claims become evidence; public quote requests reach the underwriter (temp folders)
+oc2 = copy.deepcopy(oc)
+rc = DC.record(oc2, "Pay", "Claim looks consistent", "adjuster confirmed 0.6 m inside", 0, "region-testville")
+ev_rows = WS._read_csv(rg.p("signals.csv"))
+added_claim = rc.get("evidence_added") and (ev_rows.source_id == rc["id"]).any()
+DC.record(oc2, "Query the insured", "Claim looks consistent", "", 0, "region-testville")      # changed their mind
+gone = not (WS._read_csv(rg.p("signals.csv")).source_id == rc["id"]).any()
+res.append(ok(added_claim and gone and DC._region_key("upload-x") is None,
+              "claims: paying a flood claim adds it to the region's flood evidence; changing the decision removes it"))
+import quote_requests as QR
+QR.PATH = os.path.join(tempfile.mkdtemp(), "quote_requests.csv")
+qid = QR.add(o, "A. Owner", "0700 000 000")
+waiting_before = len(QR.waiting())
+QR.close(qid, "Accept with loading", "W-0009")
+qrow = QR.load().iloc[0]
+res.append(ok(waiting_before == 1 and len(QR.waiting()) == 0 and qrow.decision_id == "W-0009"
+              and qrow.status == "decided: Accept with loading" and str(qrow.contact) == "0700 000 000",
+              "quote requests: a public request waits in the queue and is closed by the underwriter's decision"))
+
 print(f"\n{sum(res)}/{len(res)} passed")
 sys.exit(0 if all(res) else 1)

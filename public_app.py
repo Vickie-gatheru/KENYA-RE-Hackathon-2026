@@ -138,6 +138,20 @@ if o is not None:
     st.markdown(brand.briefing_html(briefing.owner_briefing(o), audience="owner", show_top=False),
                 unsafe_allow_html=True)
 
+    # the hand-off: an owner who wants cover asks for a quote; it lands in the underwriters' queue (Evaluate page)
+    import quote_requests as qr
+    with st.container(border=True):
+        st.markdown("##### Want flood cover? Ask for a quote")
+        st.caption("We pass this estimate and your contact details to an underwriter, who reviews the building and "
+                   "gets back to you. Prototype: kept on this computer only, never shared.")
+        q1, q2 = st.columns(2)
+        q_name = q1.text_input("Your name", key="pub_q_name")
+        q_contact = q2.text_input("Phone or email", key="pub_q_contact")
+        q_ok = st.checkbox("I agree that an insurer may contact me about this quote.", key="pub_q_consent")
+        if st.button("Send my quote request", type="primary", disabled=not (q_name.strip() and q_contact.strip() and q_ok)):
+            ref = qr.add(o, q_name, q_contact)
+            st.success(f"Sent - your reference is **{ref}**. An underwriter will review your building and contact you.")
+
     with st.expander("Damage by flood size"):
         ev_tbl = o["events"]
         fig = go.Figure(go.Bar(x=ev_tbl.loss_kes / 1e3, y=[f"1-in-{r}" for r in ev_tbl.return_period], orientation="h",

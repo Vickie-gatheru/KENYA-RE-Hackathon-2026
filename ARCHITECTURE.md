@@ -228,6 +228,8 @@ exhausted ≈1-in-107; layer expected loss KES 6.4 m/yr, technical rate on line 
 | `scraper.py` | Finds recent flood news for a city (Bing News RSS; GDELT when it answers), drops repeats, reads each article, LLM extraction with extract.py's checks (verbatim quote, no forecasts), merges places across articles, geocodes - output is candidates for review |
 | `workspace.py` | Model workspace back-end: one folder per region (regions/, git-ignored) - flood map, portfolio, OSM layers, reviewed flood reports, model versions; train / activate / results. Points hazard.py and features.py at a region and back (Nairobi defaults unchanged) |
 | `workspace_app.py` | The workspace in the browser (`streamlit run workspace_app.py --server.port 8503`): flood map, portfolio, map layers, flood reports (search + approve), build model, results, history - no terminal |
+| `decisions.py` | Underwriting decisions on the Evaluate page (Accept / Accept with loading / Refer / Decline; claims: Pay / adjuster / query / decline), logged beside the model's suggestion; accepted risks are written into the book (Flood briefing, Accumulation, Reinsurance include them); a PAID claim becomes approved flood evidence in the region, removed again if the decision changes |
+| `quote_requests.py` | Public estimate page -> 'Ask for a quote' -> the underwriters' queue on Evaluate; one click evaluates the request, the recorded decision closes it (kept on this computer only) |
 | `brand.py`, `.streamlit/config.toml` | Kenya Re website palette and fonts (colours only, no logo); validated chart palette |
 | `extract.py` | LLM extraction + validation (provider: groq / gemini / anthropic / openai / manual paste) |
 | `geocode.py` | Place → coordinates via Nominatim (run on a laptop with internet) |

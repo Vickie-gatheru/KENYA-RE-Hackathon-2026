@@ -381,7 +381,11 @@ def render(st, S):
     tech = S.get("tech", False)
     how, place, lat, lon, example = "Example location", "", -1.30, 36.80, None
     cls, tiv, claim, radius, k, run, sub = "semi_permanent", 2_000_000, None, 1.0, 10, False, None
-    mode = st.segmented_control("Assessment type", list(MODES), default="Proposal", key="eval_mode") or "Proposal"
+    _request_queue(st)
+    # widgets the request queue can preset: only pass a default when nothing is preset (avoids Streamlit's warning)
+    _dflt = lambda key, **kw: {} if key in st.session_state else kw
+    mode = st.segmented_control("Assessment type", list(MODES), key="eval_mode",
+                                **_dflt("eval_mode", default="Proposal")) or "Proposal"
     kind = MODES[mode]
 
     with st.container(border=True):
@@ -396,7 +400,7 @@ def render(st, S):
         else:
             _step(st, 1, "Location")
             how = st.segmented_control("Location", ["Example location", "Place or address", "Coordinates"],
-                                       default="Example location", key="eval_how",
+                                       key="eval_how", **_dflt("eval_how", default="Example location"),
                                        label_visibility="collapsed",
                                        format_func=lambda x: {"Example location": "From list",
                                                               "Place or address": "Address",
@@ -414,8 +418,10 @@ def render(st, S):
 
             _step(st, 2, "Building and value")
             fields = st.columns(3 if kind == "A flood claim" else 2, gap="large")
-            cls = fields[0].selectbox("Building type", list(NICE), format_func=NICE.get, index=1)
-            tiv = fields[1].number_input("Insured value (KES)", min_value=10_000, value=2_000_000, step=100_000)
+            cls = fields[0].selectbox("Building type", list(NICE), format_func=NICE.get, key="eval_cls",
+                                      **_dflt("eval_cls", index=1))
+            tiv = fields[1].number_input("Insured value (KES)", min_value=10_000, step=100_000, key="eval_tiv",
+                                         **_dflt("eval_tiv", value=2_000_000))
             if kind == "A flood claim":
                 claim = fields[2].number_input("Claimed loss (KES)", min_value=0, value=400_000, step=50_000)
             if tech:
@@ -424,6 +430,7 @@ def render(st, S):
                     k = st.slider("Maximum nearby assets to compare", 5, 20, 10)
             run_label = "Check claim" if kind == "A flood claim" else "Run risk assessment"
             run = st.button(run_label, type="primary", use_container_width=True)
+            run = run or st.session_state.pop("eval_autorun", False)    # 'Evaluate this request' in the queue
 
     # ---- run the evaluation
     parsed = st.session_state.pop("parsed", None)
@@ -452,6 +459,12 @@ def render(st, S):
                             port_loss=S["port_loss"], label=where)
         except ValueError as e:
             st.error(str(e)); return
+        _rq = st.session_state.pop("eval_request_new", None)        # opened from the quote-request queue
+        if _rq:
+            o["label"] = f"Quote request {_rq[0]} · {_rq[1]}"
+            st.session_state.eval_request = _rq[0]
+        else:
+            st.session_state.pop("eval_request", None)
         st.session_state.evaluation = o
         st.session_state.eval_from = "description" if parsed else "form"
         st.session_state.evaluation_form_signature = (mode, how, place, lat, lon, example, cls, tiv, claim, radius, k)
@@ -680,10 +693,40 @@ def _decision_html(o, b, tech):
                   f"<div class='sub'>{sub_}</div></div>" for lab, v, sub_ in stats) + "</div></div>")
 
 
+def _request_queue(st):
+    """Quote requests sent from the public estimate page: one click fills in the form and runs the assessment; the
+    decision recorded on it closes the request. Runs before the form's widgets exist, so it may preset them."""
+    import quote_requests as qr
+    w = qr.waiting()
+    if not len(w):
+        return
+    with st.expander(f"📥 Quote requests from the public estimate page · {len(w)} waiting"):
+        st.dataframe(w[["id", "at", "name", "contact", "place", "housing_class", "tiv_kes", "estimate_aal_kes",
+                        "risk_band"]].assign(housing_class=w.housing_class.map(NICE)).rename(
+            columns={"id": "ref", "at": "sent", "housing_class": "building", "tiv_kes": "rebuild cost (KES)",
+                     "estimate_aal_kes": "their estimate / yr (KES)", "risk_band": "risk"})
+                     .style.format({"rebuild cost (KES)": "{:,.0f}", "their estimate / yr (KES)": "{:,.0f}"}),
+                     hide_index=True, use_container_width=True)
+        wi = w.set_index("id")
+        c1, c2 = st.columns([2, 1], vertical_alignment="bottom")
+        pick = c1.selectbox("Request", list(wi.index), key="eval_queue_pick",
+                            format_func=lambda i: f"{i} · {wi.loc[i, 'name']} · {wi.loc[i, 'place']}")
+        if c2.button("Evaluate this request", type="primary", use_container_width=True):
+            x = wi.loc[pick]
+            st.session_state.update(eval_mode="Proposal", eval_how="Coordinates", eval_cls=x.housing_class,
+                                    eval_tiv=int(x.tiv_kes), eval_pin=(float(x.lat), float(x.lon), "Typed coordinates"),
+                                    eval_autorun=True, eval_request_new=(pick, x.place))
+            st.rerun()
+
+
 def _impact_text(row, o):
     import decisions as dc
     if row["kind"] == "claim":
-        return f"Claim decision logged as {row['id']}: {row['decision']}."
+        txt = f"Claim decision logged as {row['id']}: {row['decision']}."
+        if row.get("evidence_added"):
+            txt += (" A paid claim is confirmed flooding, so it now counts as flood evidence for this area: prices "
+                    "nearby reflect it straight away, and the next model trained in the Model workspace learns from it.")
+        return txt
     if row["decision"] not in dc.WRITES:
         return f"Logged as {row['id']}: {row['decision']} - not added to the book."
     txt = (f"Written into the book as {row['id']}. Quoted flood premium {_k(row['quoted_premium_kes'])} a year "
@@ -724,9 +767,16 @@ def _decision_bar(st, o, b, S):
         if c4.button("Update" if prev else "Record", type="primary", use_container_width=True, key=k + "_b"):
             row = dc.record(o, choice, b["stance"], note, loading, book, st.session_state.get("eval_from", "form"))
             st.session_state.decision_msg = _impact_text(row, o)
+            rq = st.session_state.pop("eval_request", None)
+            if rq and not is_claim:                                  # the owner's request is answered
+                import quote_requests as qr
+                qr.close(rq, choice, row["id"])
+                st.session_state.decision_msg += f" Quote request {rq} is closed with this decision."
             st.rerun()
         if choice != suggested:
             st.caption(f"Differs from the model's suggestion ({b['stance']}). The log keeps both.")
+        if is_claim and choice == "Pay":
+            st.caption("Paying adds this location to the flood evidence: every paid claim makes the next price better.")
     msg = st.session_state.pop("decision_msg", None)
     if msg:
         st.success(msg)

@@ -37,19 +37,25 @@ def rate_table(df, key, rps, loss, j100):
 
 # ------------------------------------------------------------------ accumulation zones
 def zones(df, landmarks, step_km=2.0):
-    """Assign each row to a ~2 km grid zone, labelled by the nearest named area (labels only)."""
-    lat0, lon0 = -1.45, 36.60
-    dlat, dlon = step_km / 111.32, step_km / (111.32 * np.cos(np.radians(-1.28)))
+    """Assign each row to a ~2 km grid zone, labelled by the nearest named area (labels only). The grid starts at
+    Nairobi's south-west corner for Nairobi books (so zone ids stay as before) and at the book's own corner elsewhere;
+    with no named areas (a new region without a list), zones are labelled by their centre."""
+    inside_nbo = df.lat.between(-1.45, -1.10).all() and df.lon.between(36.60, 37.10).all()
+    lat0, lon0 = (-1.45, 36.60) if inside_nbo else (np.floor(df.lat.min() * 10) / 10, np.floor(df.lon.min() * 10) / 10)
+    lat_ref = -1.28 if inside_nbo else float(df.lat.mean())
+    dlat, dlon = step_km / 111.32, step_km / (111.32 * np.cos(np.radians(lat_ref)))
     r = np.floor((df.lat - lat0) / dlat).astype(int)
     c = np.floor((df.lon - lon0) / dlon).astype(int)
     clat, clon = lat0 + (r + 0.5) * dlat, lon0 + (c + 0.5) * dlon
-    dist = ai.km(clat.to_numpy()[:, None], clon.to_numpy()[:, None],
-                 landmarks.lat.to_numpy()[None], landmarks.lon.to_numpy()[None])
-    near = landmarks.name.to_numpy()[dist.argmin(1)]
-    return pd.DataFrame({"zone": [f"Z{a:02d}-{b:02d}" for a, b in zip(r, c)],
-                         "zone_label": [f"Z{a:02d}-{b:02d} · {d:.1f} km from {n}" for a, b, n, d in
-                                        zip(r, c, near, dist.min(1))],
-                         "zone_lat": clat, "zone_lon": clon}, index=df.index)
+    zone = [f"Z{a:02d}-{b:02d}" for a, b in zip(r, c)]
+    if landmarks is None or not len(landmarks):
+        label = [f"{z} · around {la:.3f}, {lo:.3f}" for z, la, lo in zip(zone, clat, clon)]
+    else:
+        dist = ai.km(clat.to_numpy()[:, None], clon.to_numpy()[:, None],
+                     landmarks.lat.to_numpy()[None], landmarks.lon.to_numpy()[None])
+        near = landmarks.name.to_numpy()[dist.argmin(1)]
+        label = [f"{z} · {d:.1f} km from {n}" for z, n, d in zip(zone, near, dist.min(1))]
+    return pd.DataFrame({"zone": zone, "zone_label": label, "zone_lat": clat, "zone_lon": clon}, index=df.index)
 
 
 # ------------------------------------------------------------------ quoting

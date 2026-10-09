@@ -31,6 +31,7 @@ def _city_scores():
 
 
 _CITY = None
+CITY = "Nairobi"     # the city the flood map covers; workspace.activate sets it for another region
 
 
 def city_percentile(score):
@@ -85,10 +86,10 @@ def evaluate(portfolio, lat, lon, housing_class, tiv_kes, location_source="coord
     out.update(inside_map=inside, site_score=site, max_500m=max500, mean_1km=mean1k)
     band_site, pct_site = risk_band(site)
     out["steps"].append(dict(title="Hazard map at the site", text=(
-        f"The Nairobi pluvial proxy map gives this location a flood-proneness score of **{site:.2f}** (0 = not flagged, "
+        f"The {CITY} flood map (terrain and rivers) gives this location a flood-proneness score of **{site:.2f}** (0 = not flagged, "
         f"1 = most flood-prone), from terrain and distance to rivers. "
-        + (f"That is higher than {pct_site:.0f}% of Nairobi. " if site > 0 else
-           f"The map does not flag this cell (true of {pct_site:.0f}% of Nairobi). ")
+        + (f"That is higher than {pct_site:.0f}% of {CITY}. " if site > 0 else
+           f"The map does not flag this cell (true of {pct_site:.0f}% of {CITY}). ")
         + f"Within 500 m the wettest map cell scores {max500:.2f}; the 1 km neighbourhood averages {mean1k:.2f}."
         + ("" if inside else " **The site is outside the hazard map - it cannot be priced from the map.**"))))
 
@@ -181,7 +182,7 @@ def evaluate(portfolio, lat, lon, housing_class, tiv_kes, location_source="coord
             why.append(f"no reported flood place lies within {3 * ai_kwargs.get('sigma', ai.SIGMA_KM):.1f} km")
         if "ml_explanation" in out:
             mx = out["ml_explanation"]
-            why.append(f"the ML model ranks this spot above {mx['city_percentile']:.0f}% of Nairobi "
+            why.append(f"the ML model ranks this spot above {mx['city_percentile']:.0f}% of {CITY} "
                        f"(uplift only applies in the top {mx['top_share'] * 100:.0f}%), mainly because: {mx['reasons']}")
         out["steps"].append(dict(title="AI drainage adjustment", text=(
             f"{txt} (the larger applies). Final score **{final:.2f}**. The map cannot see blocked or overloaded drains; "
@@ -260,7 +261,7 @@ def plain_summary(o):
         return ["This location is outside the flood map, so it cannot be priced here."]
     pct = o["city_percentile"]
     out.append(("The flood map rates this location as more flood-prone than "
-                f"{pct:.0f}% of Nairobi." if o["final_score"] > 0 else
+                f"{pct:.0f}% of {CITY}." if o["final_score"] > 0 else
                 "The flood map does not show flood risk at this location.")
                + f" Of the {o['n_comparables']} nearest insured buildings, {o['comps_flooded']} are in mapped flood areas.")
     ev_ = o.get("ai_evidence")
@@ -381,7 +382,7 @@ def report_markdown(o):
     lines = [f"# Flood risk evaluation - {o['label']}", "",
              f"Location {o['lat']:.5f}, {o['lon']:.5f} ({o['location_source']}) · {o['housing_class'].replace('_', ' ')} · "
              f"insured KES {o['tiv_kes']:,.0f}", "",
-             f"**Risk band:** {o['risk_band']} (more flood-prone than {o['city_percentile']:.0f}% of Nairobi) · "
+             f"**Risk band:** {o['risk_band']} (more flood-prone than {o['city_percentile']:.0f}% of {CITY}) · "
              f"**Technical premium:** KES {o['aal_kes']:,.0f} ({o['rate_per_mille']:.2f} per mille; insured after a "
              f"KES {o.get('deductible_kes', 0):,.0f} ASSUMED deductible: KES {o.get('aal_insured_kes', o['aal_kes']):,.0f}) · "
              f"**Confidence:** {o['confidence']} ({'; '.join(o['confidence_reasons'])})", ""]

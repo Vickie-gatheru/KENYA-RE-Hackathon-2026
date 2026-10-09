@@ -402,7 +402,7 @@ def render(st, S):
                                                               "Place or address": "Address",
                                                               "Coordinates": "Pin on map"}[x]) or "Example location"
             if how == "Place or address":
-                place = st.text_input("Place, estate or road in Nairobi", "Kibera",
+                place = st.text_input(f"Place, estate or road in {ev.CITY}", "Kibera" if ev.CITY == "Nairobi" else "",
                                       help="Found on OpenStreetMap (needs internet). County hotspot names work offline.")
             elif how == "Coordinates":
                 import pin_picker
@@ -499,18 +499,18 @@ def _ai_explanation(st, o, S):
     if mx is not None:
         if not tech:
             st.markdown(f"**2. Places like this one:** the model ranks this spot above **{mx['city_percentile']:.0f}%** "
-                        f"of Nairobi for flood risk (it only raises the risk in the top {mx['top_share'] * 100:.0f}%). "
+                        f"of {ev.CITY} for flood risk (it only raises the risk in the top {mx['top_share'] * 100:.0f}%). "
                         f"Main reasons: {mx['reasons'].replace(' (raises risk)', '').replace(' (lowers risk)', ' (lowers risk)')}.")
             return
         st.markdown(f"**2. ML flood model:** this spot is more flood-prone than **{mx['city_percentile']:.0f}%** of "
-                    f"Nairobi locations; uplift applies only in the top {mx['top_share'] * 100:.0f}%.")
+                    f"{ev.CITY} locations; uplift applies only in the top {mx['top_share'] * 100:.0f}%.")
         c = mx["contributions"].iloc[::-1]
         fx = go.Figure(go.Bar(x=c.shap, y=c.factor, orientation="h",
                               marker=dict(color=[ACCENT if v > 0 else BLUE for v in c.shap], cornerradius=4),
                               hovertemplate="%{y}: %{x:+.2f}<extra></extra>"))
         fx.update_layout(template=brand.TEMPLATE, height=60 + 34 * len(c), margin=dict(l=10, r=10, t=36, b=10),
                          title="What pushes this site's ML score up (red) or down (blue)",
-                         xaxis_title="SHAP contribution (log-odds) vs an average Nairobi location")
+                         xaxis_title=f"SHAP contribution (log-odds) vs an average {ev.CITY} location")
         st.plotly_chart(fx, use_container_width=True)
     if tech:
         st.caption("Checks on these layers (AI drainage evidence and ML flood model pages): the 24 county hotspots are "
@@ -578,7 +578,7 @@ def _glance(o):
     meter = "".join(f"<div style='background:{c}'></div>" for _, c in METER)
     labs = "".join(f"<span class='{'on' if k == i and o['final_score'] > 0 else ''}'>{n}</span>"
                    for k, (n, _) in enumerate(METER))
-    note = (f"More flood-prone than <b>{p:.0f}%</b> of Nairobi" if o["final_score"] > 0 else "Not on the flood map")
+    note = (f"More flood-prone than <b>{p:.0f}%</b> of {ev.CITY}" if o["final_score"] > 0 else "Not on the flood map")
     base, final = o["blended_score"], o["final_score"]
     ai_add = max(final - base, 0)
     seg = lambda v, c, t: f"<div title='{t}' style='width:{v * 100:.1f}%;background:{c}'></div>" if v > 0.002 else ""
@@ -659,7 +659,7 @@ def _decision_html(o, b, tech):
     r100 = e100.loc[100] if 100 in e100.index else o["events"].iloc[-2]
     on_map = o["final_score"] > 0
     stats = [("Flood risk", o["risk_band"] if on_map else "Not on map",
-              f"more flood-prone than {o['city_percentile']:.0f}% of Nairobi" if on_map else "no mapped flood risk here"),
+              f"more flood-prone than {o['city_percentile']:.0f}% of {ev.CITY}" if on_map else "no mapped flood risk here"),
              ("Technical premium / yr", _k(o["aal_kes"]),
               f"{o['rate_per_mille']:.2f} per KES 1,000 · before expenses" + (
                   f" · vs portfolio {o['portfolio_rate']:.2f}" if tech and o.get("portfolio_rate") else "")),

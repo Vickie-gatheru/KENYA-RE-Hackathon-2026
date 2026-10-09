@@ -18,8 +18,12 @@ NAIROBI_BBOX = (36.60, -1.45, 37.10, -1.10)  # lon_min, lat_min, lon_max, lat_ma
 UA = "nairobi-flood-cat-hackathon/0.1 (student project)"
 
 
-def nominatim(place, city="Nairobi", bbox=NAIROBI_BBOX, country="Kenya"):
+CITY, BBOX = "Nairobi", NAIROBI_BBOX     # defaults for searches; workspace.activate sets them for another region
+
+
+def nominatim(place, city=None, bbox=None, country="Kenya"):
     """bbox = (lon_min, lat_min, lon_max, lat_max); results outside it are not returned."""
+    city, bbox = city or CITY, bbox or BBOX
     q = urllib.parse.urlencode({"q": f"{place}, {city}, {country}", "format": "json", "limit": 1,
                                 "viewbox": ",".join(map(str, bbox)), "bounded": 1})
     req = urllib.request.Request(f"https://nominatim.openstreetmap.org/search?{q}", headers={"User-Agent": UA})

@@ -169,6 +169,19 @@ def ensure(r):
         activate(r)
 
 
+def _set_city(name, bbox):
+    """Everything else that is tied to the city: names in labels, address search, the pin map, and two caches derived
+    from the flood map (city percentiles, city sample grid)."""
+    import evaluate as ev
+    import geocode
+    import hazard_ai as ai
+    import pin_picker
+    la0, la1, lo0, lo1 = bbox
+    ev.CITY, ev._CITY, ai._GRID = name, None, None
+    geocode.CITY, geocode.BBOX = name, (lo0, la0, lo1, la1)
+    pin_picker.BBOX = (la0, la1, lo0, lo1)
+
+
 def ensure_nairobi():
     """Put the shared modules back on Nairobi - every dashboard page calls this before it runs, so a region opened in
     the workspace never leaks into Evaluate, Portfolio, etc. Free when already on Nairobi."""
@@ -176,6 +189,7 @@ def ensure_nairobi():
     if _CURRENT[0] != "nairobi":
         hz.use_grid()
         F.use_osm()
+        _set_city("Nairobi", (-1.45, -1.10, 36.60, 37.10))
         _CURRENT = ("nairobi",)
 
 
@@ -193,6 +207,7 @@ def activate(r):
         tr = hz._Transform(a=step, c=lo0, e=-step, f=la1)
         hz.use_grid(np.zeros((max(int((la1 - la0) / step), 1), max(int((lo1 - lo0) / step), 1)), "float32"), tr)
     F.use_osm(r.osm_dir())
+    _set_city(r.name, r.bbox or (-1.45, -1.10, 36.60, 37.10))
     _CURRENT = _stamp(r)
 
 

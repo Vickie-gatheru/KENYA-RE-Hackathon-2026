@@ -314,6 +314,21 @@ def render(st, embedded=False):
 
     # ------------------------------------------------------------------ 6. results
     with t_res:
+        if embedded and not r.builtin and r.exposure() is not None:
+            on = st.session_state.get("dashboard_region") == key
+            u1, u2 = st.columns([1, 2], vertical_alignment="center")
+            if on:
+                u2.success(f"The whole dashboard is running on {r.name}.")
+                if u1.button("↩ Back to Nairobi", use_container_width=True):
+                    st.session_state.pop("dashboard_region", None)
+                    st.rerun()
+            else:
+                if u1.button(f"▶ Use {r.name} in the dashboard", type="primary", use_container_width=True):
+                    st.session_state.dashboard_region = key
+                    st.rerun()
+                u2.caption(f"Flood briefing, Evaluate, Accumulation, Reinsurance and the Assistant then run on {r.name}'s "
+                           "portfolio, flood map, approved flood reports and active model - for this browser session. "
+                           "One click returns to Nairobi.")
         if r.exposure() is None:
             st.info("Load a portfolio (step 2) to see losses.")
         elif st.button("Run the loss model", type="primary") or st.session_state.get("ws_res_key") == (key, r.cfg.get("active_model")):

@@ -561,5 +561,21 @@ finally:
 res.append(ok(st_off.get("offline") and added_off == 1 and rf.candidates()[0]["place_name"] == "Kisauni",
               "news search: with no internet (and no LLM) it falls back to saved articles and cached readings"))
 
+# ---- dashboard on a workspace region: zones and city name
+zn = uw.zones(d, hs)
+dl, dn = 2.0 / 111.32, 2.0 / (111.32 * np.cos(np.radians(-1.28)))
+old_ids = [f"Z{a:02d}-{b:02d}" for a, b in zip(np.floor((d.lat + 1.45) / dl).astype(int),
+                                                 np.floor((d.lon - 36.60) / dn).astype(int))]
+zr = uw.zones(d.assign(lat=d.lat - 2.8, lon=d.lon + 2.8), hs.iloc[0:0])        # a book near Mombasa, no named areas
+res.append(ok(list(zn.zone) == old_ids and zr.zone_label.str.contains("around").all() and
+              (zr.zone.str.match(r"Z\d\d-\d\d$")).all(),
+              "zones: Nairobi ids unchanged; another city gets its own grid, labelled by coordinates"))
+import evaluate as EVm
+WS.ensure(rg)
+city_in = EVm.CITY
+WS.ensure_nairobi()
+res.append(ok(city_in == "Testville" and EVm.CITY == "Nairobi",
+              "region switch: labels use the region's name, and switching back restores Nairobi"))
+
 print(f"\n{sum(res)}/{len(res)} passed")
 sys.exit(0 if all(res) else 1)

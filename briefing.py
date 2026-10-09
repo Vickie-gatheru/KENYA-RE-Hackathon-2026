@@ -61,7 +61,7 @@ def rule_briefing(o):
     pct = o["city_percentile"]
     if o["final_score"] > 0:
         drivers.append(dict(factor="Flood-prone location", effect="raises" if pct >= 70 else "lowers",
-                            detail=f"More flood-prone than {pct:.0f}% of Nairobi on the flood map."))
+                            detail=f"More flood-prone than {pct:.0f}% of {ev.CITY} on the flood map."))
     else:
         drivers.append(dict(factor="Not on the flood map", effect="lowers",
                             detail="The map shows no flood risk at this spot."))

@@ -70,14 +70,32 @@ def kes(x, unit="m"):
 _sp = os.path.join(DATA, "signals.csv")
 d, hs, raw = load(os.path.getmtime(_sp) if os.path.exists(_sp) else 0)
 sites = ai.consolidate(raw) if raw is not None else None
+# A workspace region can run the whole dashboard (Model workspace -> 'Use in dashboard'): its portfolio, approved flood
+# reports, validation list and active model replace Nairobi's for this browser session.
+import workspace as ws_
+DREG = st.session_state.get("dashboard_region")
+_R = ws_.Region(DREG) if DREG and DREG != "nairobi" and DREG in ws_.list_regions() else None
+if _R is not None and _R.exposure() is None:
+    _R = None
+if _R is not None:
+    st.session_state.pop("custom_portfolio", None)
+    d = _R.exposure()
+    raw = _R.signals()
+    raw = raw.dropna(subset=["lat", "lon"]) if len(raw) else raw
+    sites = ai.consolidate(raw) if len(raw) else None
+    hs = _R.validation() if _R.validation() is not None else pd.DataFrame(columns=["name", "lat", "lon"])
+CITY_NAME = _R.name if _R is not None else "Nairobi"
+HS_TXT = lambda col: f"{int(col.sum())} / {len(hs)}" if len(hs) else "no list"    # known flood areas detected
 _custom = st.session_state.get("custom_portfolio")       # a portfolio loaded on the Portfolio page replaces the starter
 if _custom is not None:
     d = _custom["d"]
 import decisions as dc_                                    # risks the underwriters accepted on the Evaluate page
-BOOK_KEY = "nairobi" if _custom is None else "upload-" + re.sub(r"[^a-z0-9]+", "-", _custom["name"].lower())
+BOOK_KEY = ("region-" + _R.key if _R is not None else "nairobi" if _custom is None
+            else "upload-" + re.sub(r"[^a-z0-9]+", "-", _custom["name"].lower()))
 d = dc_.with_written(d, BOOK_KEY)
 N_WRITTEN = int(d["written_here"].sum()) if "written_here" in d else 0
-BOOK = (_custom["name"] if _custom else "SYNTHETIC starter portfolio") + (f" + {N_WRITTEN} written here" if N_WRITTEN
+BOOK = (f"{_R.name} portfolio" if _R is not None else _custom["name"] if _custom else "SYNTHETIC starter portfolio") + (
+    f" + {N_WRITTEN} written here" if N_WRITTEN
                                                                           else "")
 
 
@@ -219,6 +237,8 @@ def placebo(sites_, mode_, w_max_, sigma_, n=300):
 
 _mp = ml.MODEL_PATH
 bundle = load_ml(os.path.getmtime(_mp) if os.path.exists(_mp) else 0)
+if _R is not None:
+    bundle = _R.model()            # the region's active model (None = flood map + approved reports only)
 
 # ================================================================== sidebar
 UW_PAGES = ["Portfolio overview", "Evaluate a risk or claim", "Accumulation", "Insurance & reinsurance", "Ask the assistant"]
@@ -249,11 +269,12 @@ def _page_stub():
 
 
 PAGES = {p: st.Page(_page_stub, title=NAV_LABEL.get(p, p), url_path=URL[p], icon=f":material/{PAGE_ICON[p]}:",
-                    default=(p == "Portfolio overview")) for p in UW_PAGES + DATA_PAGES + (TECH_PAGES if tech else [])}
+                    default=(p == "Portfolio overview"))
+         for p in UW_PAGES + DATA_PAGES + (TECH_PAGES if tech and _R is None else [])}
 _pg = st.navigation(list(PAGES.values()), position="hidden")
 page = next(p for p, v in PAGES.items() if v.url_path == _pg.url_path)
 with nav:
-    for group, items in [("Underwrite", UW_PAGES), ("Data & models", DATA_PAGES)] +                         ([("Model analysis", TECH_PAGES)] if tech else []):
+    for group, items in [("Underwrite", UW_PAGES), ("Data & models", DATA_PAGES)] +                         ([("Model analysis", TECH_PAGES)] if tech and _R is None else []):
         st.markdown(f"<div class='kre-nav-group'>{group}</div>", unsafe_allow_html=True)
         for p in items:
             with st.container(key=f"kre_nav_on" if p == page else f"kre_nav_{URL[p].replace('-', '_')}"):
@@ -314,7 +335,14 @@ if page == "Model workspace":
     st.markdown(brand.page_header("Model workspace", workspace_page.NOTE, workspace_page.INTRO), unsafe_allow_html=True)
     workspace_page.render(st, embedded=True)
     st.stop()
-ws_.ensure_nairobi()
+if _R is not None:
+    ws_.ensure(_R)
+else:
+    ws_.ensure_nairobi()
+if _R is not None and ctrl.button("↩ Back to Nairobi", type="primary", use_container_width=True,
+                                  help=f"The dashboard is running on {_R.name}. Return to the Nairobi book."):
+    st.session_state.pop("dashboard_region", None)
+    st.rerun()
 
 # ================================================================== model runs
 base = run_model(d, tuple(tier_rp.items()), depth_scale, n_sims)
@@ -325,7 +353,8 @@ B_ = bundle if use_ml else None
 if use_ai:
     d_cur = ai.apply_combined(d, S_, B_, mode, w_max, sigma, w_ml)
     cur = run_model(d_cur, tuple(tier_rp.items()), depth_scale, n_sims)
-    rec = ai.hotspot_recall_combined(hs, S_, B_, mode, w_max, sigma, w_ml)
+    rec = (ai.hotspot_recall_combined(hs, S_, B_, mode, w_max, sigma, w_ml) if len(hs)
+           else hs.assign(base_flagged=False, ai_flagged=False, uplift=0.0))
     fp = ai.footprint(d_cur)
     glat, glon, gbase = ai.city_grid()
     g_up = np.zeros(len(glat))
@@ -349,11 +378,17 @@ else:
 if page == "Ask the assistant":
     st.caption("Prototype · synthetic portfolio · estimated flood map · assumed terms")
 else:
-    INTRO = {"Portfolio overview": "The Nairobi flood-loss picture: portfolio exposure, severe-event losses, uncertainty and the AI layer's measured impact.",
+    INTRO = {"Portfolio overview": f"The {CITY_NAME} flood-loss picture: portfolio exposure, severe-event losses, uncertainty and the AI layer's measured impact.",
              "Evaluate a risk or claim": "Price a new risk, check a flood claim, or review a broker's submission."}
     st.markdown(brand.page_header(NAV_LABEL.get(page, page), _labels, INTRO.get(page)), unsafe_allow_html=True)
 if elnino:
     st.markdown(ELNINO_BANNER, unsafe_allow_html=True)
+if _R is not None:
+    st.markdown(f"<div style='background:#FFF7E6;border:1px solid #F1D9A6;border-left:4px solid #B97E00;border-radius:10px;"
+                f"padding:8px 14px;margin:0 0 .8rem;font-size:.86rem;color:#5C3D00'>📍 <b>Running on {_R.name}</b> - "
+                f"portfolio, flood map, approved flood reports and model "
+                f"{_R.cfg.get('active_model') or '(none: flood map + reports only)'} from the Model workspace. "
+                f"'Back to Nairobi' is in the sidebar.</div>", unsafe_allow_html=True)
 loss_cur = cur["loss"]
 
 # ================================================================== 0. evaluate a risk or claim
@@ -387,8 +422,8 @@ if page == 'Portfolio overview':
              dict(label=f"1-in-{rps[j4]} flood loss", value=kes(cur["port"][j4]),
                   sub=[f"{100 / rps[j4]:.1f}% chance a year", f"range {r95(cur['sims_rp'][:, j4])}"])]
     if use_ai and tech:
-        cards.append(dict(label="County flood hotspots detected", value=f"{int(rec.ai_flagged.sum())} / 24",
-                          sub=[f"map alone {int(rec.base_flagged.sum())} / 24", f"{fp.get('pct_city_area', 0):.1f}% of map raised"]))
+        cards.append(dict(label="County flood hotspots detected", value=HS_TXT(rec.ai_flagged),
+                          sub=[f"map alone {HS_TXT(rec.base_flagged)}", f"{fp.get('pct_city_area', 0):.1f}% of map raised"]))
     st.markdown("### Portfolio snapshot")
     st.markdown(brand.kpis(cards), unsafe_allow_html=True)
     range_note = (f"Ranges are the 5th–95th percentile of the Monte Carlo, which varies damage, depth and which years "
@@ -417,8 +452,8 @@ if page == 'Portfolio overview':
         impact.markdown("**AI impact on the 1-in-100 loss**")
         impact.markdown(f"{kes(proxy_loss)} proxy-only → **{kes(ai_loss)} with AI**")
         impact.caption(f"{src} · change {delta_pct:+.0f}% · held-out validation below")
-        validation.metric("Hotspots detected", f"{int(rec.ai_flagged.sum())} / 24",
-                  f"proxy baseline: {int(rec.base_flagged.sum())} / 24")
+        validation.metric("Hotspots detected", HS_TXT(rec.ai_flagged),
+                  f"proxy baseline: {HS_TXT(rec.base_flagged)}")
         footprint.metric("Buildings uplifted", f"{fp.get('pct_buildings', 0):.0f}%",
                  f"{fp.get('pct_tiv', 0):.0f}% of insured value")
     else:
@@ -496,8 +531,8 @@ if page == 'Portfolio overview':
             f"1-in-{rps[jtop]} loss": kes(cur["port"][jtop]),
             "rates by building type": {r.housing_class: f"{r.rate_per_mille:.2f} per mille" for r in rt_all.itertuples()},
             "largest zones by 1-in-100 loss": [f"{r.zone_label}: {kes(r.loss_100y_kes)}" for r in zt_all.head(3).itertuples()],
-            "AI hazard layer": (f"on ({src}); county hotspots detected {int(rec.ai_flagged.sum())} of 24 vs "
-                                  f"{int(rec.base_flagged.sum())} of 24 without it; 1-in-{rps[j100]} loss without it "
+            "AI hazard layer": (f"on ({src}); known flood areas detected {HS_TXT(rec.ai_flagged)} vs "
+                                  f"{HS_TXT(rec.base_flagged)} without it; 1-in-{rps[j100]} loss without it "
                                   f"{kes(base['port'][j100])}") if use_ai else "off",
             "key caveats": ["hazard is a terrain-and-river proxy, not measured flood depth",
                             f"return periods are assumed ({mapping_name}); this changes AAL several-fold",

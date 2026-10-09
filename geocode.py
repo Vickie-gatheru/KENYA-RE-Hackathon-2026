@@ -18,9 +18,10 @@ NAIROBI_BBOX = (36.60, -1.45, 37.10, -1.10)  # lon_min, lat_min, lon_max, lat_ma
 UA = "nairobi-flood-cat-hackathon/0.1 (student project)"
 
 
-def nominatim(place):
-    q = urllib.parse.urlencode({"q": f"{place}, Nairobi, Kenya", "format": "json", "limit": 1,
-                                "viewbox": ",".join(map(str, NAIROBI_BBOX)), "bounded": 1})
+def nominatim(place, city="Nairobi", bbox=NAIROBI_BBOX, country="Kenya"):
+    """bbox = (lon_min, lat_min, lon_max, lat_max); results outside it are not returned."""
+    q = urllib.parse.urlencode({"q": f"{place}, {city}, {country}", "format": "json", "limit": 1,
+                                "viewbox": ",".join(map(str, bbox)), "bounded": 1})
     req = urllib.request.Request(f"https://nominatim.openstreetmap.org/search?{q}", headers={"User-Agent": UA})
     with urllib.request.urlopen(req, timeout=20) as r:
         res = json.load(r)

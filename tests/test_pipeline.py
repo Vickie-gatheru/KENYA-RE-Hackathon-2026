@@ -429,7 +429,8 @@ book = pd.DataFrame({"PolicyRef": ["A1", "A2", "A3", "A4", "A5", "A6"],
                      "Sum Insured": ["KES 5,000,000", "2500000", "1000000", "900000", "700000", ""]})
 cols = IM.guess_columns(book)
 res.append(ok(cols == {"loc_id": "PolicyRef", "lat": "Latitude", "lon": "Longitude", "tiv_kes": "Sum Insured",
-                       "housing_class": "Construction", "floor_area_m2": None, "floors": None},
+                       "housing_class": "Construction", "floor_area_m2": None, "cost_per_m2_kes": None, "floors": None,
+                       "hazard_score_common": None},
               "importer: the insurer's column names are matched automatically"))
 res.append(ok([IM.classify(t) for t in ["RC frame", "Concrete block", "Mabati", "Timber", "Prefab container"]]
               == ["concrete_rcc", "permanent_masonry", "informal_iron_sheet", "semi_permanent", None],
@@ -447,6 +448,75 @@ try:
 except ValueError:
     guarded = True
 res.append(ok(guarded, "model refuses a portfolio with blank values instead of returning NaN losses"))
+
+# ---- scraper + model workspace (temporary folder; no network: articles and the LLM are scripted)
+import tempfile
+import scraper as SC
+import workspace as WS
+import hazard as HZ
+import features as FT
+arts = [dict(url="https://example.org/a?utm=1", title="Floods hit Testville estates", date="2026-05-01"),
+        dict(url="https://www.example.org/a", title="Floods hit Testville estates (copy)", date="2026-05-01"),
+        dict(url="https://news.example.com/b", title="Floods hit Testville estates!", date="2026-05-02"),
+        dict(url="https://news.example.com/c", title="Rain alert for Testville this weekend", date="2026-05-03")]
+kept_a, dropped_a = SC.dedupe(arts)
+res.append(ok(len(kept_a) == 2 and dropped_a == 2, "scraper: the same link and syndicated copies are dropped"))
+res.append(ok(SC.place_key("Port Reitz creeks") == SC.place_key("Port Reitz Creek"),
+              "scraper: plural / capitalisation variants are one place"))
+txt = ("Heavy rain on Monday flooded homes in Kisauni estate, residents said. " * 3 + "Officials warned that more "
+       "flooding is expected in Nyali next week. " + "Filler sentence about the town. " * 30 + "Testville.")
+reply = json.dumps({"signals": [
+    dict(place_name="Kisauni", place_type="estate", mechanism="unknown", severity=2, event_date=None, confidence=0.9,
+         evidence_quote="Heavy rain on Monday flooded homes in Kisauni estate, residents said."),
+    dict(place_name="Nyali", place_type="estate", mechanism="unknown", severity=1, event_date=None, confidence=0.8,
+         evidence_quote="Officials warned that more flooding is expected in Nyali next week."),
+    dict(place_name="Likoni", place_type="estate", mechanism="unknown", severity=3, event_date=None, confidence=0.9,
+         evidence_quote="Likoni was swept away by the floods.")]})
+cand, st_ = SC.harvest("Testville", lambda p: reply, tempfile.mkdtemp(), articles=[dict(arts[0], text=txt)],
+                       geocoder=lambda p: (-1.25, 36.85, p), log=lambda *a: None)
+res.append(ok([c["place_name"] for c in cand] == ["Kisauni"] and st_["rejected"] == 2 and cand[0]["status"] == "pending"
+              and "forecast or warning, not a report of flooding" in st_["reasons"],
+              "scraper: only quote-verified actual flooding becomes a candidate; forecasts and invented quotes rejected"))
+
+WS.ROOT = tempfile.mkdtemp(prefix="ws_test_")
+try:
+    import rasterio
+    from rasterio.transform import Affine
+    g0, tr0 = HZ._load()
+    crop = g0["common"][:, 600:].copy()
+    with rasterio.io.MemoryFile() as mf:
+        with mf.open(driver="GTiff", height=crop.shape[0], width=crop.shape[1], count=1, dtype="float32",
+                     crs="EPSG:4326", transform=Affine(tr0.a, 0, tr0.c + 600 * tr0.a, 0, tr0.e, tr0.f)) as dst:
+            dst.write(crop, 1)
+        tif = mf.read()
+    rg = WS.create("Testville")
+    WS.save_map(rg, tif)
+    la0, la1, lo0, lo1 = rg.bbox
+    raw_e = pd.read_csv(EXP)
+    raw_e = raw_e[raw_e.lon.between(lo0, lo1)].drop(columns=[c for c in raw_e if c.startswith("hazard_score")])
+    de, rep_e = IM.prepare(raw_e, IM.guess_columns(raw_e), bbox=rg.bbox)
+    WS.save_portfolio(rg, de, rep_e, "testville.csv")
+    sg_all = pd.read_csv(os.path.join(os.path.dirname(EXP), "signals.csv"))
+    sg = sg_all[sg_all.lon.between(lo0, lo1) & sg_all.lat.between(la0, la1)].dropna(subset=["lat", "lon"])
+    rg.save_candidates(SC.merge(sg.to_dict("records"),
+                                geocoder=lambda p: tuple(sg[sg.place_name == p][["lat", "lon"]].iloc[0]) + ("t",)))
+    before = len(rg.signals())
+    WS.review(rg, {c["id"]: "approved" for c in rg.candidates()})
+    v_, m_ = WS.train(rg, log=lambda *a: None)
+    unused = rg.cfg.get("active_model") is None
+    WS.set_active(rg, v_)
+    _, rr_ = WS.results(rg, n_sims=50)
+    ok_ws = (before == 0 and len(rg.signals()) > 0 and unused and m_["spatial_cv_auc"] > 0.5
+             and set(rr_) == {"flood map only", "with flood reports + ML"}
+             and rr_["with flood reports + ML"]["aal"] >= rr_["flood map only"]["aal"] > 0
+             and HZ.READER == "region")
+finally:
+    WS.activate(WS.Region("nairobi"))          # back to the Nairobi maps for anything after this
+    HZ.use_grid(); FT.use_osm()
+res.append(ok(ok_ws, "workspace: new region from upload to approved reports, trained model, activation and losses"))
+res.append(ok(abs(float(HZ.sample([-1.30], [36.80])["common"][0]) - float(g0["common"][
+    int((-1.30 - tr0.f) / tr0.e), int((36.80 - tr0.c) / tr0.a)])) < 1e-6,
+              "workspace: switching back restores the Nairobi flood map exactly"))
 
 print(f"\n{sum(res)}/{len(res)} passed")
 sys.exit(0 if all(res) else 1)

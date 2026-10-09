@@ -50,9 +50,14 @@ class City:
         self.lat, self.lon = F.city_points()
         self.X, self.feats = F.compute(self.lat, self.lon, F.extended_features())
         self.far = _km(self.lat, self.lon, pos.lat.to_numpy(float), pos.lon.to_numpy(float)).min(1) > EXCLUDE_KM
-        rd = self.X[:, self.feats.index("road_density")]
-        self.road = rd
-        self.built = rd >= np.median(rd)
+        if "road_density" in self.feats:
+            rd = self.X[:, self.feats.index("road_density")]
+            self.road = rd
+            self.built = rd >= np.median(rd)
+        else:     # no road layer (a new region before its map layers are fetched): no built-up correction possible -
+            self.road = np.zeros(len(self.lat))        # 'target' and 'mixed' fall back to uniform and the 'hard' CV
+            self.built = np.ones(len(self.lat), bool)  # becomes ordinary spatial CV
+        self.has_roads = "road_density" in self.feats
 
     def background(self, scheme, n, rng):
         ok = np.flatnonzero(self.far)
@@ -143,14 +148,17 @@ def hard_cv(cfg, pos, Xp, city, seed):
     return float(roc_auc_score(np.r_[np.ones(len(s_pos)), np.zeros(ok.sum())], np.r_[s_pos, s_ev[ok]]))
 
 
-def configs(city):
+def configs(city, quick=False):
+    """quick: the smaller grid used when a model is built inside the web app (about a minute) - the same rule
+    chooses, over the options that mattered in the full run."""
     base = [f for f in F.available_features() if f in city.feats]
     ext = city.feats
     out = []
-    for bg in ("uniform", "target", "mixed"):
+    bgs = ("uniform", "mixed") if quick else ("uniform", "target", "mixed")
+    for bg in (bgs if city.has_roads else ("uniform",)):
         for fs_name, fs in (("base", base), ("extended", ext)):
-            for model in MAKERS:
-                for bag in (False, True):
+            for model in (("logistic C=0.3", "logistic C=1") if quick else MAKERS):
+                for bag in ((False,) if quick else (False, True)):
                     if bag and model == "gradient boosting":
                         continue                         # the bag is for the noisy linear models; keeps runtime sane
                     out.append(dict(background=bg, feature_set=fs_name, feats=fs, model=model, bag=bag))
@@ -161,15 +169,17 @@ def complexity(c):
     return (c["feature_set"] == "extended") + COMPLEXITY[c["model"]] + c["bag"]
 
 
-def select(signals, hotspots=None, verbose=True):
-    """Score every configuration; return (table, chosen config). Hotspots, if given, are scored only for the table."""
+def select(signals, hotspots=None, verbose=True, quick=False, progress=None):
+    """Score every configuration; return (table, chosen config). Hotspots, if given, are scored only for the table.
+    progress(i, n, row) is called after each configuration (the web app shows it)."""
     import ml_hazard as ml
     pos = positives(signals)
     city = City(pos)
     Xp, _ = F.compute(pos.lat, pos.lon, city.feats)
     rows = []
-    for c in configs(city):
-        aucs = [hard_cv(c, pos, Xp, city, seed) for seed in range(REPEATS)]
+    cfgs = configs(city, quick)
+    for i, c in enumerate(cfgs):
+        aucs = [hard_cv(c, pos, Xp, city, seed) for seed in range(2 if quick else REPEATS)]
         row = dict(background=c["background"], features=c["feature_set"], model=c["model"], bagged=c["bag"],
                    hard_cv_auc=round(float(np.mean(aucs)), 4), hard_cv_sd=round(float(np.std(aucs)), 4))
         if hotspots is not None:                         # transparency only - not used to choose
@@ -180,8 +190,9 @@ def select(signals, hotspots=None, verbose=True):
         rows.append(row)
         if verbose:
             print({k: v for k, v in row.items()}, flush=True)
+        if progress:
+            progress(i + 1, len(cfgs), row)
     tab = pd.DataFrame(rows)
-    cfgs = configs(city)
     best = int(tab.hard_cv_auc.idxmax())
     # prefer the simplest configuration within MARGIN of the best
     near = [i for i in range(len(tab)) if tab.hard_cv_auc[i] >= tab.hard_cv_auc[best] - MARGIN]

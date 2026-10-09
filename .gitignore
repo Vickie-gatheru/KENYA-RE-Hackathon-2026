@@ -9,3 +9,5 @@ Referencedoc
 _bmad-output/
 _bmad
 .agents
+# Model workspace: uploaded datasets, scraped article text and trained models stay local
+regions/

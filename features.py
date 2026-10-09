@@ -47,6 +47,13 @@ EXTENDED = ["road_density_250m", "road_density_1km", "drain_density_500m", "rela
             "dist_informal_km"]
 
 
+def use_osm(folder=None):
+    """Read rivers / drains / roads / informal areas from another region's folder (None = data/osm, Nairobi)."""
+    global OSM
+    OSM = folder or os.path.join(HERE, "data", "osm")
+    _osm.cache_clear()
+
+
 def _xy(lat, lon):
     return np.c_[np.asarray(lat, float) * KM_LAT, np.asarray(lon, float) * KM_LON]
 

@@ -43,11 +43,44 @@ def _read_tifffile(path):
 
 
 READER = None
+_REGION = None      # another region's map, set by use_grid(); None = the Nairobi maps above
+
+
+def use_grid(common=None, transform=None):
+    """Point every model step at another region's flood map: its 'common' tier as a 2-D array plus a WGS84 transform
+    (anything with .a .c .e .f). The other tiers are left at zero - the model derives every event from 'common'
+    (hazard_score_common only). use_grid() with no arguments returns to the Nairobi maps."""
+    global _REGION
+    _REGION = None if common is None else (
+        {t: (np.asarray(common, "float32") if t == "common" else np.zeros(np.shape(common), "float32")) for t in TIERS},
+        transform)
+    _load.cache_clear()
+    import features
+    features._raster_layers.cache_clear()
+
+
+def read_geotiff(path):
+    """(array, transform) from a single-band GeoTIFF in latitude/longitude (EPSG:4326), as the organisers' maps are."""
+    try:
+        import rasterio
+        with rasterio.open(path) as r:
+            if r.crs is not None and r.crs.to_epsg() not in (4326, None):
+                raise ValueError(f"The flood map is in {r.crs}; it must be in latitude/longitude (EPSG:4326).")
+            a, tr = r.read(1).astype("float32"), r.transform
+    except ImportError:
+        a, tr = _read_tifffile(path)
+        a = a.astype("float32")
+    a[~np.isfinite(a)] = 0
+    a[a < 0] = 0                       # nodata values below zero mean 'not flagged'
+    return a, tr
 
 
 @lru_cache(maxsize=1)
 def _load():
     global READER
+    if _REGION is not None:
+        READER = "region"
+        return _REGION
     grids, tr = {}, None
     try:
         import rasterio  # noqa: F401  (the GeoTIFFs are the source of truth when GDAL works)

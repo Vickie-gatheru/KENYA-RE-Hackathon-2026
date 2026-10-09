@@ -2,12 +2,13 @@ numpy
 pandas
 scipy
 matplotlib
-streamlit>=1.40
+streamlit==1.65.0       # pinned: page links, navigation and segmented controls used by the app
 plotly>=6.0
-scikit-learn     # ML flood model
+scikit-learn==1.9.1     # pinned: the saved ML models (out/ml_model.pkl, regions/*/models) are tied to it
 shap             # explains the ML model
 rasterio         # optional: reads the GeoTIFF hazard maps; if it fails (Windows DLL), data/hazard/hazard_grids.npz is used
 trafilatura      # optional: cleaner article text in fetch_sources.py
 anthropic        # optional: only if LLM_PROVIDER=anthropic
 openai           # optional: only if LLM_PROVIDER=openai
 pypdf            # reads broker submission PDFs (submission.py)
+openpyxl         # reads Excel portfolios (importer.py)

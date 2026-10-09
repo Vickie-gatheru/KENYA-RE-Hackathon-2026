@@ -295,8 +295,18 @@ def search_news(r, call, log=print, max_articles=12):
     if r.validation() is not None:
         names = [str(n).lower() for n in r.validation().iloc[:, 0]]
         is_list = lambda t: sum(n in t.lower() for n in names) >= max(10, len(names) // 2)
-    new, stats = scraper.harvest(r.name, call, r.p("sources"), known_urls=known, max_articles=max_articles,
-                                 geocoder=geocoder(r), log=log, is_validation_list=is_list)
+    try:
+        new, stats = scraper.harvest(r.name, call, r.p("sources"), known_urls=known, max_articles=max_articles,
+                                     geocoder=geocoder(r), log=log, is_validation_list=is_list)
+    except ConnectionError:              # demo-day safety: no internet -> re-read what earlier searches saved
+        saved = scraper.saved_articles(r.p("sources"))
+        if not saved:
+            raise ConnectionError("No internet, and no articles saved from earlier searches to fall back on.")
+        log(f"No internet - re-reading the {len(saved)} articles saved from earlier searches (their LLM readings "
+            "are cached, so this works offline).")
+        new, stats = scraper.harvest(r.name, call, r.p("sources"), max_articles=len(saved), geocoder=geocoder(r),
+                                     log=log, articles=saved, is_validation_list=is_list)
+        stats["offline"] = True
     by_id = {c["id"]: c for c in old}
     added = 0
     for c in new:
@@ -381,6 +391,55 @@ def train(r, log=print, progress=None):
     tab.to_csv(os.path.join(d, "selection.csv"), index=False)
     r.log(f"model {v} trained (spatial CV AUC {cv['roc_auc']:.3f})")
     return v, metrics
+
+
+def model_report(r, version):
+    """A plain record of one model version for a risk committee or regulator: what data it learned from (every
+    approved flood report with its source), how it was chosen and validated, what is assumed, and who did what when."""
+    m = next((v for v in r.versions() if v["version"] == version), None)
+    if m is None:
+        raise ValueError(f"No model {version}")
+    b = r.model(version)
+    sig = r.signals()
+    p = r.cfg.get("portfolio", {})
+    sel = (b or {}).get("selection") or {}
+    lines = [f"# Flood model report - {r.name}, {version}", "",
+             f"Created {m['created']}. Status: **{'ACTIVE' if r.cfg.get('active_model') == version else 'not active'}**.",
+             "", "## What it learned from", "",
+             f"- Flood map: {'the organisers supplied maps' if r.builtin else 'uploaded GeoTIFF'}"
+             + (f" ({r.cfg['map']['flagged_pct']}% of cells flood-prone, ~{r.cfg['map']['cell_m']:.0f} m cells)"
+                if r.cfg.get("map") else ""),
+             f"- Map layers (OpenStreetMap): {', '.join(r.osm_layers()) or 'none'}",
+             f"- Approved flood places: {m['places']}, against {m['background_points']} background points "
+             "(places with no report - assumed 'not reported', not 'never floods')",
+             f"- Portfolio: {p.get('file', 'starter portfolio')} "
+             f"({p.get('rows') or (len(r.exposure()) if r.exposure() is not None else '-')} buildings)", "",
+             "## How it was chosen and validated", "",
+             f"- Setup: {m['model']}, {m['features']} features, {sel.get('background', '-')} background - chosen by "
+             "spatial cross-validation on the training data only (the validation list is never used to choose)",
+             f"- Spatial cross-validation AUC: {m['spatial_cv_auc']} (0.5 = chance, 1.0 = perfect ranking)"]
+    if m.get("heldout_auc") is not None:
+        lines.append(f"- Held-out check on {m['heldout_n']} known flood areas: AUC {m['heldout_auc']} (flood map alone "
+                     f"{m['heldout_auc_flood_map_only']}); {m['heldout_top10']} in the model's top 10% of locations")
+    else:
+        lines.append("- No held-out list of known flood areas was provided, so there is no independent check.")
+    if m.get("caution"):
+        lines.append(f"- CAUTION: {m['caution']}")
+    lines += ["", "## Assumptions (stated, not measured)", "",
+              "- Flood score 0-1 is a susceptibility, not a depth; depth = score x 4 m; five flood sizes from the "
+              "organisers' tiers with ASSUMED return periods (1-in-10 to 1-in-250)",
+              "- Damage from the JRC Africa residential depth-damage curve, adjusted per building type",
+              "- The ML model raises the flood score only in the top 10% of locations, by up to 0.30",
+              "- Flood reports: an LLM extracted each place with an exact quote from the article (checked word for "
+              "word); forecasts and warnings were rejected; a person approved each place before training", "",
+              "## Approved flood reports used", "", "| Place | Severity | Quote | Source |", "|---|---|---|---|"]
+    if len(sig):
+        for x in sig.dropna(subset=["lat", "lon"]).drop_duplicates(["place_name", "source_url"]).itertuples():
+            q = str(x.evidence_quote).replace("|", "/")[:220]
+            lines.append(f"| {x.place_name} | {x.severity} | \"{q}\" | [{str(x.source_title)[:60]}]({x.source_url}) |")
+    lines += ["", "## History", ""] + [f"- {h['at']}: {h['what']}" for h in r.cfg.get("history", [])]
+    lines += ["", "_Prototype built for the Kenya Re AI4I Hackathon 2026 - indicative, not a Kenya Re product._"]
+    return "\n".join(lines)
 
 
 def set_active(r, version):

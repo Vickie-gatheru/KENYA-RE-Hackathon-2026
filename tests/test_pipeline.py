@@ -525,5 +525,41 @@ res.append(ok(abs(float(HZ.sample([-1.30], [36.80])["common"][0]) - float(g0["co
     int((-1.30 - tr0.f) / tr0.e), int((36.80 - tr0.c) / tr0.a)])) < 1e-6,
               "workspace: switching back restores the Nairobi flood map exactly"))
 
+# ---- underwriting decisions, model report, offline news fallback (temporary folders)
+import decisions as DC
+DC.ROOT = tempfile.mkdtemp(prefix="dec_test_")
+od = copy.deepcopy(o)
+r1 = DC.record(od, "Accept with loading", "Accept with a loading or higher deductible", "raised floor", 25, "bk")
+book1 = DC.with_written(d, "bk")
+r2 = DC.record(od, "Refer", "Accept with a loading or higher deductible", "", 0, "bk")      # changes their mind
+book2 = DC.with_written(d, "bk")
+log_ = DC.load("bk")
+res.append(ok(len(book1) == len(d) + 1 and book1.loc_id.iloc[-1] == r1["id"] and book1.written_here.iloc[-1]
+              and abs(r1["quoted_premium_kes"] - 1.25 * od["aal_kes"]) < 1 and len(book2) == len(d)
+              and list(log_.status) == ["superseded", "active"] and DC.default_for("Standard terms") == "Accept",
+              "decisions: accept writes the risk into the book with its loading; a new decision supersedes the old"))
+r3 = DC.record(od, "Accept", "Standard terms", "", 0, "bk")
+DC.withdraw(r3["id"], "bk")
+cm.check_exposure(DC.with_written(d, "bk"))
+res.append(ok(len(DC.with_written(d, "bk")) == len(d) and (DC.load("bk").status == "withdrawn").sum() == 1
+              and len(DC.load("bk")) == 3, "decisions: a withdrawn risk leaves the book but stays in the log"))
+rep_md = WS.model_report(rg, v_)
+res.append(ok(all(k in rep_md for k in ("## What it learned from", "Spatial cross-validation AUC", "## Assumptions",
+                                         "## Approved flood reports used", "## History")) and "ACTIVE" in rep_md,
+              "workspace: model report lists data, validation, assumptions, sources and history"))
+rf = WS.create("Offlineville")
+rf.cfg["bbox"] = [-1.45, -1.10, 36.60, 37.10]; rf.cfg["name"] = "Testville"; rf.save()   # the article's city
+SC.harvest("Testville", lambda p: reply, rf.p("sources"), articles=[dict(arts[0], text=txt)],
+           geocoder=lambda p: (-1.25, 36.85, p), log=lambda *a: None)              # an earlier, online search
+_disc = SC.discover
+SC.discover = lambda *a, **k: (_ for _ in ()).throw(ConnectionError("offline"))
+try:
+    st_off, added_off = WS.search_news(rf, lambda p: (_ for _ in ()).throw(RuntimeError("no LLM either")),
+                                       log=lambda *a: None)
+finally:
+    SC.discover = _disc
+res.append(ok(st_off.get("offline") and added_off == 1 and rf.candidates()[0]["place_name"] == "Kisauni",
+              "news search: with no internet (and no LLM) it falls back to saved articles and cached readings"))
+
 print(f"\n{sum(res)}/{len(res)} passed")
 sys.exit(0 if all(res) else 1)

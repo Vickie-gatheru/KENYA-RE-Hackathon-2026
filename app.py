@@ -2,7 +2,7 @@
 For the LLM features (quote from text, memo), set the provider in the same terminal first, e.g.
     $env:LLM_PROVIDER="groq"; $env:GROQ_API_KEY="gsk_..."
 """
-import json, os
+import json, os, re
 import streamlit as st
 
 import brand
@@ -73,7 +73,12 @@ sites = ai.consolidate(raw) if raw is not None else None
 _custom = st.session_state.get("custom_portfolio")       # a portfolio loaded on the Portfolio page replaces the starter
 if _custom is not None:
     d = _custom["d"]
-BOOK = _custom["name"] if _custom else "SYNTHETIC starter portfolio"
+import decisions as dc_                                    # risks the underwriters accepted on the Evaluate page
+BOOK_KEY = "nairobi" if _custom is None else "upload-" + re.sub(r"[^a-z0-9]+", "-", _custom["name"].lower())
+d = dc_.with_written(d, BOOK_KEY)
+N_WRITTEN = int(d["written_here"].sum()) if "written_here" in d else 0
+BOOK = (_custom["name"] if _custom else "SYNTHETIC starter portfolio") + (f" + {N_WRITTEN} written here" if N_WRITTEN
+                                                                          else "")
 
 
 def portfolio_loader():
@@ -260,6 +265,12 @@ mapping_name, depth_scale, n_sims = list(cm.RP_MAPPINGS)[0], cm.DEPTH_SCALE_M, 5
 use_ai, mode, w_max, sigma, w_ml = have_sites or have_ml, "ai", ai.W_MAX, ai.SIGMA_KM, ml.W_ML
 use_sites, use_ml = have_sites, have_ml
 src = "Evidence + ML model (larger wins)" if have_sites and have_ml else "ML model only" if have_ml else     "Evidence sites only" if have_sites else "off"
+# El Nino stress scenario (ASSUMED): floods come about twice as often (the 'more frequent' reading of the flood tiers,
+# 1-in-5 to 1-in-100 years instead of 1-in-10 to 1-in-250) and run 25% deeper. Every page uses it while it is on.
+ELNINO_MAPPING, ELNINO_DEPTH = "more frequent (5-100y)", 1.25
+elnino = ctrl.toggle("🌧 El Niño stress test", key="elnino",
+                     help="ASSUMED scenario for a wet season: floods about twice as frequent and 25% deeper. Every "
+                          "page - prices, portfolio losses, reinsurance - is recalculated while it is on.")
 if tech:
     ctrl.divider()
     _assume = ctrl.expander("Model assumptions")
@@ -286,7 +297,13 @@ if tech:
                                help=f"Applied to the top {int(ml.TOP_SHARE * 100)}% of the city by ML flood probability.")
     ctrl.caption(f"LLM: **{llm.provider()}**" + ("" if llm.configured() else " (not configured - quote-from-text "
                  "and memo need LLM_PROVIDER and an API key set before `streamlit run`)"))
+if elnino:
+    mapping_name, depth_scale = ELNINO_MAPPING, depth_scale * ELNINO_DEPTH
 tier_rp = cm.RP_MAPPINGS[mapping_name]
+ELNINO_BANNER = ("<div style='background:#E8F0FA;border:1px solid #BFD3EE;border-left:4px solid #1F5AA6;border-radius:10px;"
+                 "padding:8px 14px;margin:0 0 .8rem;font-size:.86rem;color:#0F3B73'>🌧 <b>El Niño stress test is on</b> - "
+                 "every figure assumes floods about twice as frequent and 25% deeper (ASSUMED scenario, not a forecast). "
+                 "Switch it off in the sidebar for normal-year figures.</div>")
 
 # ================================================================== data & models: the model workspace
 # Drawn before the dashboard's own model runs and stopped after, so it never needs the Nairobi run. It may switch the
@@ -335,6 +352,8 @@ else:
     INTRO = {"Portfolio overview": "The Nairobi flood-loss picture: portfolio exposure, severe-event losses, uncertainty and the AI layer's measured impact.",
              "Evaluate a risk or claim": "Price a new risk, check a flood claim, or review a broker's submission."}
     st.markdown(brand.page_header(NAV_LABEL.get(page, page), _labels, INTRO.get(page)), unsafe_allow_html=True)
+if elnino:
+    st.markdown(ELNINO_BANNER, unsafe_allow_html=True)
 loss_cur = cur["loss"]
 
 # ================================================================== 0. evaluate a risk or claim
@@ -343,20 +362,30 @@ if page == 'Evaluate a risk or claim':
     evaluate_page.render(st, dict(d=d, d_cur=d_cur, hs=hs, tier_rp=tier_rp, depth_scale=depth_scale,
                                   sites=S_ if use_ai else None, bundle=B_ if use_ai else None, signals=raw, tech=tech,
                                   ai_kwargs=dict(mode=mode, w_max=w_max, sigma=sigma, w_ml=w_ml),
-                                  port_loss=cur["port"]))
+                                  port_loss=cur["port"], book=BOOK_KEY))
 
 # ================================================================== 1. portfolio overview
 if page == 'Portfolio overview':
+    # quick actions: the day's jobs start here, one click into the right tool
+    _qa = [("Price a new risk", "fact_check", "Proposal"), ("Review a broker submission", "description", "Submission"),
+           ("Check a flood claim", "gavel", "Claim"), ("Load a new dataset", "model_training", None)]
+    for _col, (_lab, _ic, _mode) in zip(st.columns(4), _qa):
+        if _col.button(_lab, icon=f":material/{_ic}:", use_container_width=True, key=f"qa_{_ic}"):
+            if _mode:
+                st.session_state.eval_mode = _mode
+                st.switch_page(PAGES["Evaluate a risk or claim"])
+            st.switch_page(PAGES["Model workspace"])
     portfolio_loader()
     r95 = lambda arr: kes_range(pct(arr, 5), pct(arr, 95))
+    j4 = jtop if jtop != j100 else j100 - 1    # 4th card: rarest flood, or the next size down if that is the 1-in-100
     flooded = f"{int(cur['affected'][j100])} of {len(d)} buildings flooded"
     cards = [dict(label="Total insured value", value=kes(tiv, "bn"), sub=[f"{len(d)} buildings", BOOK]),
              dict(label="Expected loss per year (AAL)", value=kes(cur["aal"]),
                   sub=[f"technical rate {cur['aal'] / tiv * 1000:.2f} ‰", f"range {r95(cur['aal_sims_rp'])}"]),
              dict(label=f"1-in-{rps[j100]} flood loss", value=kes(cur["port"][j100]), key=True,
                   sub=[f"1% chance a year · {flooded}", f"range {r95(cur['sims_rp'][:, j100])}"]),
-             dict(label=f"1-in-{rps[jtop]} flood loss", value=kes(cur["port"][jtop]),
-                  sub=[f"{100 / rps[jtop]:.1f}% chance a year", f"range {r95(cur['sims_rp'][:, jtop])}"])]
+             dict(label=f"1-in-{rps[j4]} flood loss", value=kes(cur["port"][j4]),
+                  sub=[f"{100 / rps[j4]:.1f}% chance a year", f"range {r95(cur['sims_rp'][:, j4])}"])]
     if use_ai and tech:
         cards.append(dict(label="County flood hotspots detected", value=f"{int(rec.ai_flagged.sum())} / 24",
                           sub=[f"map alone {int(rec.base_flagged.sum())} / 24", f"{fp.get('pct_city_area', 0):.1f}% of map raised"]))
@@ -431,7 +460,8 @@ if page == 'Portfolio overview':
         fb.add_vline(x=port_rate, line=dict(color=MUTED, dash="dot"),
                      annotation_text=f"portfolio {port_rate:.2f} ‰", annotation_position="top")
         fb.update_layout(template=brand.TEMPLATE, height=280, margin=dict(l=10, r=60, t=40, b=10),
-                         title="Technical rate by building type", xaxis_title="KES per 1,000 insured")
+                         title="Technical rate by building type", xaxis_title="KES per 1,000 insured",
+                         xaxis=dict(range=[0, max(rt.rate_per_mille.max(), port_rate) * 1.3]))
         st.plotly_chart(fb, use_container_width=True)
         st.caption("A flat rate can undercharge more vulnerable construction types. Technical rates are a floor before expenses and profit.")
         if tech:

@@ -76,11 +76,12 @@ def dedupe(items, known=()):
 
 def discover(city, known=(), log=print, use_gdelt=True):
     """Article links about flooding in `city`, newest first, with repeats removed."""
-    items = []
+    items, reached = [], False
     for q in (f"{city} floods", f"{city} flooding", f"{city} flooded homes"):
         try:
             got = _bing(q)
             items += got
+            reached = True
             log(f"Bing News '{q}': {len(got)} articles")
         except Exception as e:
             log(f"Bing News '{q}' failed: {type(e).__name__}")
@@ -88,9 +89,12 @@ def discover(city, known=(), log=print, use_gdelt=True):
         try:
             got = _gdelt(f'"{city}" (flood OR flooding OR floods)')
             items += got
+            reached = True
             log(f"GDELT: {len(got)} articles")
         except Exception as e:                        # GDELT often rate-limits (HTTP 429): the scrape goes on without it
             log(f"GDELT unavailable ({str(e)[:40]}) - continuing with Bing News")
+    if not reached:
+        raise ConnectionError("no news source could be reached (no internet?)")
     items.sort(key=lambda x: x["date"], reverse=True)
     kept, dropped = dedupe(items, known)
     log(f"{len(kept)} new articles after removing {dropped} repeats and ones already read")
@@ -137,10 +141,17 @@ def harvest(city, call, sources_dir, known_urls=(), max_articles=12, geocoder=No
             log(f"skipped '{a['title'][:60]}': it looks like the validation list itself")
             continue
         open(os.path.join(sources_dir, sid + ".txt"), "w", encoding="utf-8").write(text)
+        json.dump(dict(url=a["url"], title=a["title"], date=a.get("date", "")),
+                  open(os.path.join(sources_dir, sid + ".json"), "w"))
         src = dict(source_id=sid, title=a["title"], url=a["url"], date=a.get("date", ""), text=text)
         stats["read"] += 1
-        try:
-            reply = call(_prompt(city, sid, text))
+        cached = os.path.join(sources_dir, sid + ".reply.json")    # each article is read by the LLM once: re-runs
+        try:                                                        # are free, reproducible and work offline
+            if os.path.exists(cached):
+                reply = open(cached, encoding="utf-8").read()
+            else:
+                reply = call(_prompt(city, sid, text))
+                open(cached, "w", encoding="utf-8").write(reply)
             got = parse_json(reply).get("signals", [])
         except Exception as e:
             log(f"extraction failed for '{a['title'][:50]}' ({type(e).__name__})")
@@ -160,6 +171,17 @@ def place_key(name):
     """'Port Reitz creeks' and 'Port Reitz Creek' are the same place: lower case, no punctuation, no plural s."""
     return " ".join(w[:-1] if len(w) > 3 and w.endswith("s") else w
                     for w in re.sub(r"\W+", " ", str(name).lower()).split())
+
+
+def saved_articles(sources_dir):
+    """Articles read in earlier searches (text + link), for re-reading without internet."""
+    out = []
+    if os.path.isdir(sources_dir):
+        for f in sorted(os.listdir(sources_dir)):
+            if f.endswith(".txt") and os.path.exists(os.path.join(sources_dir, f[:-4] + ".json")):
+                meta = json.load(open(os.path.join(sources_dir, f[:-4] + ".json")))
+                out.append(dict(meta, text=open(os.path.join(sources_dir, f), encoding="utf-8").read()))
+    return out
 
 
 def merge(signals, geocoder=None, log=print):

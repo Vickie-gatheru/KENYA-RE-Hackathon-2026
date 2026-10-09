@@ -680,6 +680,76 @@ def _decision_html(o, b, tech):
                   f"<div class='sub'>{sub_}</div></div>" for lab, v, sub_ in stats) + "</div></div>")
 
 
+def _impact_text(row, o):
+    import decisions as dc
+    if row["kind"] == "claim":
+        return f"Claim decision logged as {row['id']}: {row['decision']}."
+    if row["decision"] not in dc.WRITES:
+        return f"Logged as {row['id']}: {row['decision']} - not added to the book."
+    txt = (f"Written into the book as {row['id']}. Quoted flood premium {_k(row['quoted_premium_kes'])} a year "
+           f"(technical {_k(row['technical_premium_kes'])}"
+           + (f" + {row['loading_pct']:.0f}% loading" if row["loading_pct"] else "") + ").")
+    if np.isfinite(row["port_100_before_kes"]) and np.isfinite(row["port_100_after_kes"]):
+        txt += (f" The portfolio's 1-in-100 flood loss moves from {_k(row['port_100_before_kes'])} to "
+                f"{_k(row['port_100_after_kes'])} (+{_k(row['port_100_after_kes'] - row['port_100_before_kes'])}); "
+                "Flood briefing, Accumulation and Reinsurance now include it.")
+    return txt
+
+
+def _decision_bar(st, o, b, S):
+    """The underwriter's decision on this evaluation: starts on the model's (rule-based) suggestion, can be overridden
+    with a note; logged with the suggestion beside it. Accepted risks are written into the book."""
+    import decisions as dc
+    book = S.get("book", "nairobi")
+    is_claim = bool(o.get("claim"))
+    opts = dc.CLAIM_DECISIONS if is_claim else dc.RISK_DECISIONS
+    prev = dc.existing(o, book)
+    suggested = dc.default_for(b["stance"], is_claim)
+    k = f"dec_{abs(hash((o['label'], round(o['lat'], 5), round(o['lon'], 5), round(o['tiv_kes']))))}"
+    with st.container(border=True):
+        head = "**Your decision**"
+        if prev:
+            head += f" · recorded: {prev['decision']} ({prev['id']}, {str(prev['at'])[:16].replace('T', ' ')})"
+        st.markdown(head)
+        c1, c2, c3, c4 = st.columns([2.4, 0.9, 2.2, 1], vertical_alignment="bottom")
+        start = prev["decision"] if prev and prev["decision"] in opts else suggested
+        choice = c1.segmented_control("Decision", opts, default=start, key=k + "_d",
+                                      label_visibility="collapsed") or start
+        loading = 0
+        if not is_claim:
+            loading = c2.number_input("Loading %", 0, 300, step=5, key=k + "_l", disabled=choice != "Accept with loading",
+                                      value=int(prev["loading_pct"]) if prev and prev.get("loading_pct") else 25)
+        note = c3.text_input("Note", value=str(prev["note"]) if prev and isinstance(prev.get("note"), str) else "",
+                             placeholder="Reason, conditions, who you spoke to ...", key=k + "_n")
+        if c4.button("Update" if prev else "Record", type="primary", use_container_width=True, key=k + "_b"):
+            row = dc.record(o, choice, b["stance"], note, loading, book, st.session_state.get("eval_from", "form"))
+            st.session_state.decision_msg = _impact_text(row, o)
+            st.rerun()
+        if choice != suggested:
+            st.caption(f"Differs from the model's suggestion ({b['stance']}). The log keeps both.")
+    msg = st.session_state.pop("decision_msg", None)
+    if msg:
+        st.success(msg)
+    log = dc.load(book)
+    if len(log):
+        with st.expander(f"Decision log · {int((log.status == 'active').sum())} active"):
+            view = log.iloc[::-1][["id", "at", "label", "decision", "suggested", "loading_pct", "quoted_premium_kes",
+                                   "status", "note"]]
+            st.dataframe(view.rename(columns={"at": "when", "label": "risk", "suggested": "model suggested",
+                                              "loading_pct": "loading %", "quoted_premium_kes": "quoted premium (KES)"})
+                         .style.format({"quoted premium (KES)": "{:,.0f}", "loading %": "{:.0f}"}, na_rep="-"),
+                         hide_index=True, use_container_width=True)
+            a1, a2, a3 = st.columns([2, 1, 1], vertical_alignment="bottom")
+            act = list(log[log.status == "active"].id)
+            wid = a1.selectbox("Withdraw a decision", ["-"] + act, help="Withdrawn decisions stay in the log; a "
+                                                                        "withdrawn risk leaves the book.")
+            if a2.button("Withdraw", disabled=wid == "-", use_container_width=True):
+                dc.withdraw(wid, book)
+                st.rerun()
+            a3.download_button("Download log", log.to_csv(index=False), file_name="decision_log.csv",
+                               use_container_width=True)
+
+
 def _results(st, o, d_cur, S):
     tech = S.get("tech", False)
     b = _briefing(st, o)
@@ -687,6 +757,7 @@ def _results(st, o, d_cur, S):
                 f"{o['label']}</div><div style='color:#5B6470;font-size:.85rem;margin-bottom:.4rem'>"
                 f"{NICE[o['housing_class']]} · insured KES {o['tiv_kes']:,.0f}</div>", unsafe_allow_html=True)
     st.markdown(_decision_html(o, b, tech), unsafe_allow_html=True)
+    _decision_bar(st, o, b, S)
     sub = o.get("submission")
     n_red = sum(x["level"] == "red" for x in sub["flags"]) if sub else 0
     names = ([f"Broker submission · {n_red} red flags" if n_red else "Broker submission"] if sub else []) + \

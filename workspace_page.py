@@ -304,6 +304,11 @@ def render(st, embedded=False):
             if c2.button("Make this the active model", type="primary"):
                 ws.set_active(r, None if pick.startswith("(none") else pick)
                 st.rerun()
+            rv = pick if not pick.startswith("(none") else names[-1]
+            st.download_button(f"📄 Model report for {rv} (for a risk committee or regulator)",
+                               ws.model_report(r, rv), file_name=f"{r.key}_{rv}_model_report.md",
+                               help="What the model learned from (every approved report with its source), how it was "
+                                    "chosen and validated, the assumptions, and who did what when.")
             st.caption("AUC: 0.5 = no better than chance, 1.0 = perfect ranking. Spatial CV tests on areas the model did "
                        "not see; the held-out check uses the known-flood-areas list.")
 

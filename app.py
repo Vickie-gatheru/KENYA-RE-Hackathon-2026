@@ -218,15 +218,17 @@ bundle = load_ml(os.path.getmtime(_mp) if os.path.exists(_mp) else 0)
 # ================================================================== sidebar
 UW_PAGES = ["Portfolio overview", "Evaluate a risk or claim", "Accumulation", "Insurance & reinsurance", "Ask the assistant"]
 TECH_PAGES = ["AI drainage evidence", "ML flood model", "Sensitivity & assumptions"]
+DATA_PAGES = ["Model workspace"]
 NAV_LABEL = {"Evaluate a risk or claim": "Evaluate", "Portfolio overview": "Flood briefing",
              "Insurance & reinsurance": "Reinsurance", "Ask the assistant": "Assistant",
              "AI drainage evidence": "AI flood evidence", "Sensitivity & assumptions": "Assumptions"}
 PAGE_ICON = {"Evaluate a risk or claim": "fact_check", "Portfolio overview": "space_dashboard",
              "Insurance & reinsurance": "shield", "Accumulation": "stacked_bar_chart", "Ask the assistant": "forum",
-             "AI drainage evidence": "article", "ML flood model": "hub", "Sensitivity & assumptions": "tune"}
+             "AI drainage evidence": "article", "ML flood model": "hub", "Sensitivity & assumptions": "tune",
+             "Model workspace": "model_training"}
 URL = {"Evaluate a risk or claim": "evaluate", "Portfolio overview": "portfolio", "Accumulation": "accumulation",
        "Insurance & reinsurance": "reinsurance", "Ask the assistant": "assistant", "AI drainage evidence": "ai-evidence",
-       "ML flood model": "ml-model", "Sensitivity & assumptions": "assumptions"}
+       "ML flood model": "ml-model", "Sensitivity & assumptions": "assumptions", "Model workspace": "workspace"}
 st.markdown(brand.CSS, unsafe_allow_html=True)
 st.sidebar.markdown(brand.SIDEBAR_BRAND, unsafe_allow_html=True)
 nav = st.sidebar.container(key="kre_nav")    # filled once the current page is known
@@ -242,11 +244,11 @@ def _page_stub():
 
 
 PAGES = {p: st.Page(_page_stub, title=NAV_LABEL.get(p, p), url_path=URL[p], icon=f":material/{PAGE_ICON[p]}:",
-                    default=(p == "Portfolio overview")) for p in UW_PAGES + (TECH_PAGES if tech else [])}
+                    default=(p == "Portfolio overview")) for p in UW_PAGES + DATA_PAGES + (TECH_PAGES if tech else [])}
 _pg = st.navigation(list(PAGES.values()), position="hidden")
 page = next(p for p, v in PAGES.items() if v.url_path == _pg.url_path)
 with nav:
-    for group, items in [("Underwrite", UW_PAGES)] + ([("Model analysis", TECH_PAGES)] if tech else []):
+    for group, items in [("Underwrite", UW_PAGES), ("Data & models", DATA_PAGES)] +                         ([("Model analysis", TECH_PAGES)] if tech else []):
         st.markdown(f"<div class='kre-nav-group'>{group}</div>", unsafe_allow_html=True)
         for p in items:
             with st.container(key=f"kre_nav_on" if p == page else f"kre_nav_{URL[p].replace('-', '_')}"):
@@ -285,6 +287,17 @@ if tech:
     ctrl.caption(f"LLM: **{llm.provider()}**" + ("" if llm.configured() else " (not configured - quote-from-text "
                  "and memo need LLM_PROVIDER and an API key set before `streamlit run`)"))
 tier_rp = cm.RP_MAPPINGS[mapping_name]
+
+# ================================================================== data & models: the model workspace
+# Drawn before the dashboard's own model runs and stopped after, so it never needs the Nairobi run. It may switch the
+# shared flood map to another region; every other page switches back to Nairobi first (workspace.ensure_nairobi).
+import workspace as ws_
+if page == "Model workspace":
+    import workspace_page
+    st.markdown(brand.page_header("Model workspace", workspace_page.NOTE, workspace_page.INTRO), unsafe_allow_html=True)
+    workspace_page.render(st, embedded=True)
+    st.stop()
+ws_.ensure_nairobi()
 
 # ================================================================== model runs
 base = run_model(d, tuple(tier_rp.items()), depth_scale, n_sims)

@@ -154,8 +154,34 @@ def create(name, country="Kenya"):
     return r
 
 
+_CURRENT = ("nairobi",)    # what hazard.py / features.py point at now; their defaults are Nairobi's
+
+
+def _stamp(r):
+    tif = r.p("hazard_common.tif")
+    return (r.key, os.path.getmtime(tif) if os.path.exists(tif) else None, tuple(r.bbox or ()), tuple(r.osm_layers()))
+
+
+def ensure(r):
+    """activate(r) only if the shared modules are not already on this region (switching rebuilds the map features,
+    a second or two)."""
+    if _CURRENT != _stamp(r):
+        activate(r)
+
+
+def ensure_nairobi():
+    """Put the shared modules back on Nairobi - every dashboard page calls this before it runs, so a region opened in
+    the workspace never leaks into Evaluate, Portfolio, etc. Free when already on Nairobi."""
+    global _CURRENT
+    if _CURRENT[0] != "nairobi":
+        hz.use_grid()
+        F.use_osm()
+        _CURRENT = ("nairobi",)
+
+
 def activate(r):
     """Point the shared model modules at this region's flood map and OpenStreetMap layers."""
+    global _CURRENT
     if r.builtin:
         hz.use_grid()
     elif os.path.exists(r.p("hazard_common.tif")):
@@ -167,6 +193,7 @@ def activate(r):
         tr = hz._Transform(a=step, c=lo0, e=-step, f=la1)
         hz.use_grid(np.zeros((max(int((la1 - la0) / step), 1), max(int((lo1 - lo0) / step), 1)), "float32"), tr)
     F.use_osm(r.osm_dir())
+    _CURRENT = _stamp(r)
 
 
 # ------------------------------------------------------------------ steps

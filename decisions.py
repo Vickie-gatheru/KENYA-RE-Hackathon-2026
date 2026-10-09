@@ -5,7 +5,8 @@ with the suggestion beside it, so overrides are visible. 'Accept' and 'Accept wi
 portfolio, so the Flood briefing, Accumulation and Reinsurance pages include it; claim decisions are logged only.
 Nothing is deleted: a decision can be withdrawn, which keeps the audit trail.
 
-Stored per book in regions/<book>/decisions.csv (git-ignored, like the rest of regions/).
+Stored in the database (store.py, table 'decisions', one 'book' per portfolio); every decision is also a line in the
+audit trail (table 'events').
 """
 import datetime
 import os
@@ -13,8 +14,9 @@ import os
 import numpy as np
 import pandas as pd
 
+import store
+
 HERE = os.path.dirname(os.path.abspath(__file__))
-ROOT = os.path.join(HERE, "regions")
 RISK_DECISIONS = ["Accept", "Accept with loading", "Refer", "Decline"]
 CLAIM_DECISIONS = ["Pay", "Send a loss adjuster", "Query the insured", "Decline"]
 WRITES = {"Accept", "Accept with loading"}
@@ -23,16 +25,12 @@ COLUMNS = ["id", "at", "kind", "label", "lat", "lon", "housing_class", "tiv_kes"
            "claimed_kes", "port_100_before_kes", "port_100_after_kes", "source", "status"]
 
 
-def path(book="nairobi"):
-    return os.path.join(ROOT, book, "decisions.csv")
-
-
 def load(book="nairobi"):
-    p = path(book)
-    try:
-        d = pd.read_csv(p) if os.path.exists(p) and os.path.getsize(p) > 0 else pd.DataFrame(columns=COLUMNS)
-    except pd.errors.EmptyDataError:
-        d = pd.DataFrame(columns=COLUMNS)
+    rows = store.decisions(book)
+    d = pd.DataFrame(rows, columns=COLUMNS)
+    for c in ("lat", "lon", "tiv_kes", "loading_pct", "site_score", "final_score", "technical_premium_kes",
+              "quoted_premium_kes", "claimed_kes", "port_100_before_kes", "port_100_after_kes"):
+        d[c] = pd.to_numeric(d[c], errors="coerce")
     return d
 
 
@@ -79,9 +77,10 @@ def record(o, decision, suggested, note="", loading_pct=0.0, book="nairobi", sou
                claimed_kes=(o.get("claim") or {}).get("claimed_kes", np.nan),
                port_100_before_kes=o.get("port_100_before", np.nan), port_100_after_kes=o.get("port_100_after", np.nan),
                source=source, status="active")
-    log = pd.concat([log, pd.DataFrame([row])], ignore_index=True)[COLUMNS]
-    os.makedirs(os.path.dirname(path(book)), exist_ok=True)
-    log.to_csv(path(book), index=False)
+    store.put_decisions(book, log[log.id.isin(superseded)].to_dict("records") + [row])
+    store.log(book, f"{row['id']} {'claim' if is_claim else 'risk'} '{row['label']}': {decision}"
+              + (f" (+{load_pct:.0f}%)" if load_pct else "") + f"; model suggested '{suggested}'"
+              + (f"; note: {note}" if note else ""), kind="decision")
     if is_claim:                          # a paid claim teaches the model; a changed mind takes the evidence back
         for old_id in superseded:
             claim_evidence(old_id, book, remove=True)
@@ -93,7 +92,8 @@ def record(o, decision, suggested, note="", loading_pct=0.0, book="nairobi", sou
 def withdraw(decision_id, book="nairobi"):
     log = load(book)
     log.loc[log.id == decision_id, "status"] = "withdrawn"
-    log.to_csv(path(book), index=False)
+    store.put_decisions(book, log[log.id == decision_id].to_dict("records"))
+    store.log(book, f"{decision_id} withdrawn", kind="decision")
     claim_evidence(decision_id, book, remove=True)
 
 

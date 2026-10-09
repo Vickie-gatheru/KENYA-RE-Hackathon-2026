@@ -7,6 +7,9 @@ import pandas as pd
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(HERE))
+import tempfile
+import store as ST
+ST.ROOT = tempfile.mkdtemp(prefix="test_db_")   # FIRST: tests never touch the real database or regions/ folder
 import catmodel as cm
 import hazard_ai as ai
 import extract as ex
@@ -478,7 +481,8 @@ res.append(ok([c["place_name"] for c in cand] == ["Kisauni"] and st_["rejected"]
               and "forecast or warning, not a report of flooding" in st_["reasons"],
               "scraper: only quote-verified actual flooding becomes a candidate; forecasts and invented quotes rejected"))
 
-WS.ROOT = tempfile.mkdtemp(prefix="ws_test_")
+import store as ST
+ST.ROOT = tempfile.mkdtemp(prefix="ws_test_")      # a throwaway database and region folders for these tests
 try:
     import rasterio
     from rasterio.transform import Affine
@@ -515,19 +519,17 @@ finally:
     HZ.use_grid(); FT.use_osm()
 res.append(ok(ok_ws, "workspace: new region from upload to approved reports, trained model, activation and losses"))
 rz = WS.create("Emptyville")
-open(rz.p("signals.csv"), "w").write("\n")                  # the file an earlier 'nothing approved' save left behind
 empty_ok = len(rz.signals()) == 0
 rz.save_candidates([dict(id="x1", place_name="A", status="pending", lat=1.0, lon=2.0, signals=[])])
 WS.review(rz, {"x1": "rejected"})
 res.append(ok(empty_ok and len(rz.signals()) == 0 and "place_name" in rz.signals().columns,
-              "workspace: saving with nothing approved, or an empty signals file, does not break the page"))
+              "workspace: saving with nothing approved does not break the page"))
 res.append(ok(abs(float(HZ.sample([-1.30], [36.80])["common"][0]) - float(g0["common"][
     int((-1.30 - tr0.f) / tr0.e), int((36.80 - tr0.c) / tr0.a)])) < 1e-6,
               "workspace: switching back restores the Nairobi flood map exactly"))
 
 # ---- underwriting decisions, model report, offline news fallback (temporary folders)
 import decisions as DC
-DC.ROOT = tempfile.mkdtemp(prefix="dec_test_")
 od = copy.deepcopy(o)
 r1 = DC.record(od, "Accept with loading", "Accept with a loading or higher deductible", "raised floor", 25, "bk")
 book1 = DC.with_written(d, "bk")
@@ -580,14 +582,13 @@ res.append(ok(city_in == "Testville" and EVm.CITY == "Nairobi",
 # ---- closing the loops: paid claims become evidence; public quote requests reach the underwriter (temp folders)
 oc2 = copy.deepcopy(oc)
 rc = DC.record(oc2, "Pay", "Claim looks consistent", "adjuster confirmed 0.6 m inside", 0, "region-testville")
-ev_rows = WS._read_csv(rg.p("signals.csv"))
+ev_rows = rg.approved()
 added_claim = rc.get("evidence_added") and (ev_rows.source_id == rc["id"]).any()
 DC.record(oc2, "Query the insured", "Claim looks consistent", "", 0, "region-testville")      # changed their mind
-gone = not (WS._read_csv(rg.p("signals.csv")).source_id == rc["id"]).any()
+gone = not (rg.approved().source_id == rc["id"]).any()
 res.append(ok(added_claim and gone and DC._region_key("upload-x") is None,
               "claims: paying a flood claim adds it to the region's flood evidence; changing the decision removes it"))
 import quote_requests as QR
-QR.PATH = os.path.join(tempfile.mkdtemp(), "quote_requests.csv")
 qid = QR.add(o, "A. Owner", "0700 000 000")
 waiting_before = len(QR.waiting())
 QR.close(qid, "Accept with loading", "W-0009")
@@ -595,6 +596,28 @@ qrow = QR.load().iloc[0]
 res.append(ok(waiting_before == 1 and len(QR.waiting()) == 0 and qrow.decision_id == "W-0009"
               and qrow.status == "decided: Accept with loading" and str(qrow.contact) == "0700 000 000",
               "quote requests: a public request waits in the queue and is closed by the underwriter's decision"))
+
+# ---- the database (store.py): everything above went into one SQLite file, with an audit trail
+kinds = {e["kind"] for e in ST.events()}
+res.append(ok(os.path.exists(ST.path()) and {"region", "decision", "quote request"} <= kinds
+              and any("model v1 trained" in e["detail"] for e in ST.events("testville"))
+              and [m["version"] for m in ST.models("testville")] == ["v1"],
+              "database: regions, decisions, quote requests and model versions in one file, with an audit trail"))
+legacy = tempfile.mkdtemp(prefix="legacy_")                 # a folder written by the old file-based version
+os.makedirs(os.path.join(legacy, "oldtown", "models", "v1"))
+json.dump({"name": "Oldtown", "bbox": [-1.4, -1.2, 36.7, 36.9], "active_model": "v1",
+           "history": [{"at": "2026-10-01T10:00:00", "what": "portfolio x.csv: 10 buildings"}]},
+          open(os.path.join(legacy, "oldtown", "config.json"), "w"))
+json.dump([{"id": "c1", "place_name": "A", "status": "approved", "lat": -1.3, "lon": 36.8,
+            "signals": [{"place_name": "A", "evidence_quote": "A flooded."}]}],
+          open(os.path.join(legacy, "oldtown", "candidates.json"), "w"))
+json.dump({"created": "2026-10-01", "spatial_cv_auc": 0.7},
+          open(os.path.join(legacy, "oldtown", "models", "v1", "metrics.json"), "w"))
+ST.ROOT = legacy
+ro = WS.Region("oldtown")
+res.append(ok(WS.list_regions() == ["nairobi", "oldtown"] and ro.cfg["active_model"] == "v1" and len(ro.approved()) == 1
+              and ro.versions()[0]["spatial_cv_auc"] == 0.7 and ro.history()[0]["what"].startswith("portfolio x.csv"),
+              "database: a folder from the old file-based version is imported once, nothing lost"))
 
 print(f"\n{sum(res)}/{len(res)} passed")
 sys.exit(0 if all(res) else 1)

@@ -1,16 +1,15 @@
 """Model workspace back-end: build a flood model for a new region (or a new portfolio) inside the web app - no terminal.
 
-A region is a folder regions/<slug>/ (kept out of git):
-    config.json        name, country, bounding box, active model version, history
+A region's records live in the database (store.py, regions/kenyare_flood.db): its settings and active model, the
+flood places found for it with their review status (APPROVED places are the only evidence the model trains on), its
+model versions and scores, its geocoding cache, and every step in the audit trail. Its large files stay in a folder
+regions/<slug>/ (kept out of git):
     hazard_common.tif  the region's flood map ('common' tier, lat/lon)  - optional if the portfolio carries scores
     exposure.csv       the imported portfolio (importer.py)
     osm/*.json         rivers, drains, roads, informal areas (OpenStreetMap, fetched for the region's box)
-    candidates.json    flood places found by the scraper, waiting for review
-    signals.csv        APPROVED flood places - the only evidence the model trains on
     validation.csv     optional held-out list of known flood areas (name, lat, lon): scored, never trained on
-    gazetteer.json     place -> coordinates cache
-    sources/*.txt      article text the scraper read
-    models/vN/         each trained model (ml_model.pkl + metrics.json); one is 'active'
+    sources/*          article text the scraper read, and the LLM's reading of each
+    models/vN/         each trained model file (ml_model.pkl); one version is 'active'
 
 The built-in 'nairobi' region reads the project's own data/ (flood maps, OSM, approved signals, the 24 county hotspots)
 read-only, so new Nairobi reports can be reviewed and a new model version trained beside the live one.
@@ -42,9 +41,9 @@ def _read_csv(path):
 import catmodel as cm
 import features as F
 import hazard as hz
+import store
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-ROOT = os.path.join(HERE, "regions")
 MIN_POSITIVES = 8
 
 
@@ -53,23 +52,19 @@ def slug(name):
 
 
 def list_regions():
-    os.makedirs(ROOT, exist_ok=True)
-    out = ["nairobi"] + sorted(d for d in os.listdir(ROOT) if d != "nairobi"
-                               and os.path.exists(os.path.join(ROOT, d, "config.json")))
-    return out
+    return ["nairobi"] + [k for k in store.region_keys() if k != "nairobi"]
 
 
 class Region:
     def __init__(self, key):
         self.key = key
         self.builtin = key == "nairobi"
-        self.dir = os.path.join(ROOT, key)
+        self.dir = os.path.join(store.ROOT, key)
         os.makedirs(self.dir, exist_ok=True)
-        p = os.path.join(self.dir, "config.json")
-        self.cfg = json.load(open(p)) if os.path.exists(p) else {}
+        self.cfg = store.get_region(key) or {}
         if self.builtin and not self.cfg:
             self.cfg = dict(name="Nairobi", country="Kenya", bbox=[-1.45, -1.10, 36.60, 37.10], builtin=True,
-                            created=_now(), history=[])
+                            created=_now())
             self.save()
 
     # ---- paths and state
@@ -77,11 +72,16 @@ class Region:
         return os.path.join(self.dir, *a)
 
     def save(self):
-        json.dump(self.cfg, open(self.p("config.json"), "w"), indent=2, default=str)
+        store.save_region(self.key, self.cfg)
 
     def log(self, what):
-        self.cfg.setdefault("history", []).append(dict(at=_now(), what=what))
+        """One line in the audit trail (and the settings saved with it)."""
         self.save()
+        store.log(self.key, what)
+
+    def history(self):
+        """[{at, what}] oldest first, from the audit trail."""
+        return [dict(at=e["at"], what=e["detail"]) for e in store.events(self.key)][::-1]
 
     @property
     def name(self):
@@ -108,10 +108,21 @@ class Region:
             return cm.load_exposure(os.path.join(HERE, "data", "exposure_nairobi_with_hazard.csv"))
         return None
 
+    def approved(self):
+        """Flood evidence approved in the workspace (news finds and paid claims), one row per quote."""
+        rows = []
+        for c in self.candidates():
+            if c["status"] == "approved" and c.get("lat") is not None:
+                for s_ in c["signals"]:
+                    rows.append({**{k: s_.get(k) for k in SIGNAL_COLUMNS[:11]}, "lat": c["lat"], "lon": c["lon"],
+                                 "geocode_method": "nominatim (workspace)" if not c["id"].startswith("claim-")
+                                 else "claim location"})
+        return pd.DataFrame(rows, columns=SIGNAL_COLUMNS)
+
     def signals(self):
-        """Approved flood evidence (Nairobi: the project's reviewed signals plus any approved here)."""
+        """All approved flood evidence (Nairobi: the project's reviewed signals plus any approved here)."""
         parts = [_read_csv(os.path.join(HERE, "data", "signals.csv"))] if self.builtin else []
-        parts.append(_read_csv(self.p("signals.csv")))
+        parts.append(self.approved())
         parts = [x for x in parts if len(x)]
         return pd.concat(parts, ignore_index=True) if parts else pd.DataFrame(columns=SIGNAL_COLUMNS)
 
@@ -122,18 +133,13 @@ class Region:
         return v if len(v) else None
 
     def candidates(self):
-        return json.load(open(self.p("candidates.json"))) if os.path.exists(self.p("candidates.json")) else []
+        return store.candidates(self.key)
 
     def save_candidates(self, c):
-        json.dump(c, open(self.p("candidates.json"), "w"), indent=1, default=str)
+        store.save_candidates(self.key, c)
 
     def versions(self):
-        d = self.p("models")
-        if not os.path.isdir(d):
-            return []
-        vs = sorted((v for v in os.listdir(d) if re.fullmatch(r"v\d+", v)), key=lambda v: int(v[1:]))
-        return [dict(version=v, **json.load(open(os.path.join(d, v, "metrics.json")))) for v in vs
-                if os.path.exists(os.path.join(d, v, "metrics.json"))]
+        return store.models(self.key)
 
     def model(self, version=None):
         v = version or self.cfg.get("active_model")
@@ -149,8 +155,8 @@ def create(name, country="Kenya"):
     key = slug(name)
     r = Region(key)
     if not r.cfg:
-        r.cfg = dict(name=name.strip(), country=country, bbox=None, created=_now(), history=[])
-        r.save()
+        r.cfg = dict(name=name.strip(), country=country, bbox=None, created=_now())
+        r.log(f"region created ({country})")
     return r
 
 
@@ -273,16 +279,15 @@ def fetch_osm(r, log=print):
 
 
 def geocoder(r):
-    """place -> (lat, lon) inside the region's box, cached in the region's gazetteer (OpenStreetMap, 1 a second)."""
+    """place -> (lat, lon) inside the region's box, cached in the database (OpenStreetMap, 1 a second)."""
     import geocode
-    path = r.p("gazetteer.json")
-    cache = json.load(open(path)) if os.path.exists(path) else {}
     la0, la1, lo0, lo1 = r.bbox or (-1.45, -1.10, 36.60, 37.10)
 
     generic = r"\b(creeks?|river mouth|river|estates?|areas?|villages?|roads?|junction|bridge|market|ward|sub-?county)\b"
 
     def find(place):
-        if place not in cache:
+        hit = store.gaz_get(r.key, place)
+        if hit is store.MISSING:
             g = None
             # try the name as written, then without generic words ('Port Reitz Creek' -> 'Port Reitz')
             for q in dict.fromkeys([place, re.sub(r"\s+", " ", re.sub(generic, " ", place, flags=re.I)).strip()]):
@@ -293,9 +298,9 @@ def geocoder(r):
                                           country=r.cfg.get("country", "Kenya"))
                 except Exception:
                     g = None
-            cache[place] = [g[0], g[1], (g[2] or "").split(",")[0] + f" ({q})"] if g else None
-            json.dump(cache, open(path, "w"))
-        return cache[place]
+            hit = [g[0], g[1], (g[2] or "").split(",")[0] + f" ({q})"] if g else None
+            store.gaz_put(r.key, place, hit)
+        return hit
     return find
 
 
@@ -341,24 +346,16 @@ def search_news(r, call, log=print, max_articles=12):
 
 
 def review(r, decisions):
-    """decisions: {candidate id: 'approved' | 'rejected' | 'pending'}. Approved places with coordinates are written to
-    signals.csv - the only evidence the model trains on."""
+    """decisions: {candidate id: 'approved' | 'rejected' | 'pending'}. Approved places with coordinates are the only
+    evidence the model trains on (Region.approved). Returns the number of approved quotes."""
     cands = r.candidates()
     for c in cands:
         if c["id"] in decisions:
             c["status"] = decisions[c["id"]]
     r.save_candidates(cands)
-    rows = []
-    for c in cands:
-        if c["status"] == "approved" and c["lat"] is not None:
-            for s in c["signals"]:
-                rows.append({**{k: s.get(k) for k in ("place_name", "place_type", "mechanism", "severity", "event_date",
-                                                      "evidence_quote", "confidence", "source_id", "source_title",
-                                                      "source_url", "source_date")},
-                             "lat": c["lat"], "lon": c["lon"], "geocode_method": "nominatim (workspace)"})
-    pd.DataFrame(rows, columns=SIGNAL_COLUMNS).to_csv(r.p("signals.csv"), index=False)
-    r.log(f"review saved: {sum(c['status'] == 'approved' for c in cands)} places approved")
-    return len(rows)
+    if decisions:
+        r.log(f"review saved: {sum(c['status'] == 'approved' for c in cands)} places approved")
+    return len(r.approved())
 
 
 def train(r, log=print, progress=None):
@@ -402,7 +399,8 @@ def train(r, log=print, progress=None):
                    heldout_auc_flood_map_only=round(test["auc_proxy"], 4) if test else None,
                    heldout_top10=test["hotspots_in_top_10pct_ml"] if test else None,
                    heldout_n=int(len(val)) if test else None, caution=caution)
-    json.dump(metrics, open(os.path.join(d, "metrics.json"), "w"), indent=2)
+    json.dump(metrics, open(os.path.join(d, "metrics.json"), "w"), indent=2)     # a copy beside the model file
+    store.add_model(r.key, v, metrics)
     tab.to_csv(os.path.join(d, "selection.csv"), index=False)
     r.log(f"model {v} trained (spatial CV AUC {cv['roc_auc']:.3f})")
     return v, metrics
@@ -452,7 +450,7 @@ def model_report(r, version):
         for x in sig.dropna(subset=["lat", "lon"]).drop_duplicates(["place_name", "source_url"]).itertuples():
             q = str(x.evidence_quote).replace("|", "/")[:220]
             lines.append(f"| {x.place_name} | {x.severity} | \"{q}\" | [{str(x.source_title)[:60]}]({x.source_url}) |")
-    lines += ["", "## History", ""] + [f"- {h['at']}: {h['what']}" for h in r.cfg.get("history", [])]
+    lines += ["", "## History", ""] + [f"- {h['at']}: {h['what']}" for h in r.history()]
     lines += ["", "_Prototype built for the Kenya Re AI4I Hackathon 2026 - indicative, not a Kenya Re product._"]
     return "\n".join(lines)
 
@@ -489,4 +487,5 @@ def results(r, n_sims=300):
 
 def delete_region(r):
     if not r.builtin:
+        store.delete_region(r.key)
         shutil.rmtree(r.dir, ignore_errors=True)

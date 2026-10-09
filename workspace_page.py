@@ -367,7 +367,7 @@ def render(st, embedded=False):
 
     # ------------------------------------------------------------------ history
     with t_hist:
-        h = r.cfg.get("history", [])
+        h = r.history()                      # from the database's audit trail
         if h:
             st.dataframe(pd.DataFrame(h[::-1]).rename(columns={"at": "when", "what": "what happened"}), hide_index=True,
                          use_container_width=True)

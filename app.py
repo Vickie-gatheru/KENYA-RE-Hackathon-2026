@@ -87,7 +87,7 @@ if _R is not None:
 else:     # Nairobi: the workspace's Nairobi region is the control point - its approved reports (new news finds, paid
           # claims) join the project's evidence, and its active model, if one is set, replaces out/ml_model.pkl
     _RN = ws_.Region("nairobi")
-    _extra = ws_._read_csv(_RN.p("signals.csv"))
+    _extra = _RN.approved()                        # from the database
     if len(_extra):
         raw = pd.concat([raw, _extra], ignore_index=True) if raw is not None else _extra
         sites = ai.consolidate(raw.dropna(subset=["lat", "lon"]))

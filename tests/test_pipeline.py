@@ -514,6 +514,13 @@ finally:
     WS.activate(WS.Region("nairobi"))          # back to the Nairobi maps for anything after this
     HZ.use_grid(); FT.use_osm()
 res.append(ok(ok_ws, "workspace: new region from upload to approved reports, trained model, activation and losses"))
+rz = WS.create("Emptyville")
+open(rz.p("signals.csv"), "w").write("\n")                  # the file an earlier 'nothing approved' save left behind
+empty_ok = len(rz.signals()) == 0
+rz.save_candidates([dict(id="x1", place_name="A", status="pending", lat=1.0, lon=2.0, signals=[])])
+WS.review(rz, {"x1": "rejected"})
+res.append(ok(empty_ok and len(rz.signals()) == 0 and "place_name" in rz.signals().columns,
+              "workspace: saving with nothing approved, or an empty signals file, does not break the page"))
 res.append(ok(abs(float(HZ.sample([-1.30], [36.80])["common"][0]) - float(g0["common"][
     int((-1.30 - tr0.f) / tr0.e), int((36.80 - tr0.c) / tr0.a)])) < 1e-6,
               "workspace: switching back restores the Nairobi flood map exactly"))

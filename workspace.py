@@ -28,6 +28,17 @@ import shutil
 import numpy as np
 import pandas as pd
 
+SIGNAL_COLUMNS = ["place_name", "place_type", "mechanism", "severity", "event_date", "evidence_quote", "confidence",
+                  "source_id", "source_title", "source_url", "source_date", "lat", "lon", "geocode_method"]
+
+
+def _read_csv(path):
+    """A CSV that may be missing or empty (e.g. no places approved yet) -> DataFrame, never an error."""
+    try:
+        return pd.read_csv(path) if os.path.exists(path) and os.path.getsize(path) > 0 else pd.DataFrame()
+    except pd.errors.EmptyDataError:
+        return pd.DataFrame()
+
 import catmodel as cm
 import features as F
 import hazard as hz
@@ -99,17 +110,16 @@ class Region:
 
     def signals(self):
         """Approved flood evidence (Nairobi: the project's reviewed signals plus any approved here)."""
-        parts = []
-        if self.builtin and os.path.exists(os.path.join(HERE, "data", "signals.csv")):
-            parts.append(pd.read_csv(os.path.join(HERE, "data", "signals.csv")))
-        if os.path.exists(self.p("signals.csv")):
-            parts.append(pd.read_csv(self.p("signals.csv")))
-        return pd.concat(parts, ignore_index=True) if parts else pd.DataFrame()
+        parts = [_read_csv(os.path.join(HERE, "data", "signals.csv"))] if self.builtin else []
+        parts.append(_read_csv(self.p("signals.csv")))
+        parts = [x for x in parts if len(x)]
+        return pd.concat(parts, ignore_index=True) if parts else pd.DataFrame(columns=SIGNAL_COLUMNS)
 
     def validation(self):
         if self.builtin:
             return pd.read_csv(os.path.join(HERE, "data", "nairobi_hotspots_geocoded.csv"))
-        return pd.read_csv(self.p("validation.csv")) if os.path.exists(self.p("validation.csv")) else None
+        v = _read_csv(self.p("validation.csv"))
+        return v if len(v) else None
 
     def candidates(self):
         return json.load(open(self.p("candidates.json"))) if os.path.exists(self.p("candidates.json")) else []
@@ -294,7 +304,7 @@ def review(r, decisions):
                                                       "evidence_quote", "confidence", "source_id", "source_title",
                                                       "source_url", "source_date")},
                              "lat": c["lat"], "lon": c["lon"], "geocode_method": "nominatim (workspace)"})
-    pd.DataFrame(rows).to_csv(r.p("signals.csv"), index=False)
+    pd.DataFrame(rows, columns=SIGNAL_COLUMNS).to_csv(r.p("signals.csv"), index=False)
     r.log(f"review saved: {sum(c['status'] == 'approved' for c in cands)} places approved")
     return len(rows)
 
